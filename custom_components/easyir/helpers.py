@@ -32,9 +32,27 @@ def encode_raw_to_tuya_base64(raw_timings: list[int]) -> str:
     return base64.b64encode(bytes(encoded)).decode()
 
 
-def _parse_raw(raw_string: str) -> list[int]:
-    """Parse raw timing string from profile format."""
-    value = json.loads(raw_string)
+def _parse_raw(raw: Any) -> list[int]:
+    """Parse raw timings from profile (JSON string or embedded array)."""
+    if isinstance(raw, (list, tuple)):
+        return [int(x) for x in raw]
+    if raw is None:
+        raise ValueError("Command raw payload is null")
+    if not isinstance(raw, str):
+        raise ValueError(
+            f"Command raw must be a string or list, got {type(raw).__name__}"
+        )
+    stripped = raw.strip()
+    if not stripped:
+        raise ValueError(
+            "Command raw payload is empty (this profile has no IR code for this key)"
+        )
+    try:
+        value = json.loads(stripped)
+    except json.JSONDecodeError as err:
+        raise ValueError(f"Invalid command raw JSON: {err}") from err
+    if not isinstance(value, list):
+        raise ValueError("Command raw must decode to a JSON array of integers")
     return [int(x) for x in value]
 
 

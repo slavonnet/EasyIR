@@ -78,6 +78,36 @@ class TestResolveProfileRaw(unittest.TestCase):
             ):
                 resolve_profile_raw(path=str(path), action="cool")
 
+    def test_resolves_json_array_not_string(self) -> None:
+        payload = {
+            "commands": {
+                "cool": {
+                    "auto": {
+                        "24": [3198, -9806, 487, -1553],
+                    }
+                }
+            }
+        }
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "profile.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            result = resolve_profile_raw(
+                path=str(path),
+                action="cool",
+                hvac_mode="cool",
+                fan_mode="auto",
+                temperature=24,
+            )
+        self.assertEqual(result, [3198, -9806, 487, -1553])
+
+    def test_rejects_empty_raw_string(self) -> None:
+        payload = {"commands": {"off": ""}}
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "profile.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "empty"):
+                resolve_profile_raw(path=str(path), action="off")
+
     def test_resolves_nested_command_tree(self) -> None:
         payload = {
             "commands": {
