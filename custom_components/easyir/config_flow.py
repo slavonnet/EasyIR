@@ -11,7 +11,7 @@ from homeassistant.data_entry_flow import FlowResult
 from .const import CONF_ENDPOINT_ID, CONF_IEEE, CONF_PROFILE_PATH, DEFAULT_ENDPOINT_ID, DOMAIN
 
 
-class LgTuyaIrConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+class EasyIrConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for EasyIR."""
 
     VERSION = 1

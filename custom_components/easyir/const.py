@@ -1,6 +1,6 @@
-"""Constants for LG Tuya IR integration."""
+"""Constants for EasyIR integration."""
 
-DOMAIN = "lg_tuya_ir"
+DOMAIN = "easyir"
 SERVICE_SEND_RAW = "send_raw"
 SERVICE_SEND_COMMAND = "send_profile_command"
 CONF_IEEE = "ieee"

@@ -4,14 +4,14 @@
 lg_ir_power_off:
   alias: LG IR Power Off
   sequence:
-    - service: lg_tuya_ir.send_profile_command
+    - service: easyir.send_profile_command
       data:
         action: "off"
 
 lg_ir_cool_24_auto:
   alias: LG IR Cool 24 Auto
   sequence:
-    - service: lg_tuya_ir.send_profile_command
+    - service: easyir.send_profile_command
       data:
         action: "cool"
         fan_mode: "auto"
@@ -20,6 +20,6 @@ lg_ir_cool_24_auto:
 lg_ir_send_raw_example:
   alias: LG IR Send Raw Example
   sequence:
-    - service: lg_tuya_ir.send_raw
+    - service: easyir.send_raw
       data:
         raw_timings: [3198, -9806, 487, -1553, 579, -518]

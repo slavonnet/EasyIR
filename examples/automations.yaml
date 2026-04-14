@@ -2,7 +2,7 @@
 
 - alias: EasyIR AC from helpers
   use_blueprint:
-    path: lg_tuya_ir/ac_from_helpers.yaml
+    path: easyir/ac_from_helpers.yaml
     input:
       hvac_mode_entity: input_select.easyir_hvac_mode
       fan_mode_entity: input_select.easyir_fan_mode

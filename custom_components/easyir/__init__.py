@@ -1,4 +1,4 @@
-"""LG Tuya IR custom integration."""
+"""EasyIR custom integration."""
 
 from __future__ import annotations
 

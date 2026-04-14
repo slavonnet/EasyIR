@@ -1,7 +1,7 @@
 blueprint:
   name: LG Tuya IR - AC command from helpers
   description: >
-    Sends `lg_tuya_ir.send_profile_command` when selected helpers change.
+    Sends `easyir.send_profile_command` when selected helpers change.
     This allows low-code control from UI widgets (input_select/input_number).
   domain: automation
   input:
@@ -65,7 +65,7 @@ trigger:
 condition: []
 
 action:
-  - service: lg_tuya_ir.send_profile_command
+  - service: easyir.send_profile_command
     data:
       ieee: "{{ ieee }}"
       profile_path: "{{ profile_path }}"

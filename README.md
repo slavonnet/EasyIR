@@ -10,15 +10,15 @@ Custom Home Assistant integration to send IR profile commands via Tuya TS1201 ov
 - Converts IR `Raw` timings to TS1201-compatible base64 payload.
 - Sends code using ZHA cluster command (`0xE004`, `IRSend`).
 - Provides two services:
-  - `lg_tuya_ir.send_raw`
-  - `lg_tuya_ir.send_profile_command`
+  - `easyir.send_raw`
+  - `easyir.send_profile_command`
 - Supports default values from UI setup (`ieee`, `profile_path`, `endpoint_id`).
 - Includes built-in send rate-limit and profile file caching.
 
 ## Quick start (MVP 0.0.1)
 
 1. Put this project into a GitHub repository.
-2. Update placeholders in `custom_components/lg_tuya_ir/manifest.json`:
+2. Update placeholders in `custom_components/easyir/manifest.json`:
    - `documentation`
    - `issue_tracker`
    - `codeowners`
@@ -37,13 +37,13 @@ Custom Home Assistant integration to send IR profile commands via Tuya TS1201 ov
 ### Send profile command (using defaults from config flow)
 
 ```yaml
-service: lg_tuya_ir.send_profile_command
+service: easyir.send_profile_command
 data:
   action: "off"
 ```
 
 ```yaml
-service: lg_tuya_ir.send_profile_command
+service: easyir.send_profile_command
 data:
   action: "cool"
   fan_mode: "auto"
@@ -53,7 +53,7 @@ data:
 ### Send profile command (explicit values in call)
 
 ```yaml
-service: lg_tuya_ir.send_profile_command
+service: easyir.send_profile_command
 data:
   ieee: "8c:65:a3:ff:fe:92:63:ce"
   profile_path: "/config/ir/7062.json"
@@ -63,7 +63,7 @@ data:
 ### Send raw timings directly
 
 ```yaml
-service: lg_tuya_ir.send_raw
+service: easyir.send_raw
 data:
   ieee: "8c:65:a3:ff:fe:92:63:ce"
   raw_timings: [3198, -9806, 487, -1553, 579, -518]
@@ -79,7 +79,7 @@ Goal: after connecting repo in HACS, get working AC device in a room and use it 
    - `input_number.easyir_target_temp`
 2. Import/create scripts from `examples/scripts.yaml`.
 3. Create automation from blueprint:
-   - `blueprints/automation/lg_tuya_ir/ac_from_helpers.yaml`
+   - `blueprints/automation/easyir/ac_from_helpers.yaml`
    - this sends command when helper values change (widget-style control).
 4. Use ready examples:
    - blueprint instances: `examples/automations.yaml`

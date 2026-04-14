@@ -15,14 +15,14 @@ from unittest.mock import patch
 HELPERS_PATH = (
     Path(__file__).resolve().parent.parent
     / "custom_components"
-    / "lg_tuya_ir"
+    / "easyir"
     / "helpers.py"
 )
-_SPEC = importlib.util.spec_from_file_location("lg_tuya_ir_helpers", HELPERS_PATH)
+_SPEC = importlib.util.spec_from_file_location("easyir_helpers", HELPERS_PATH)
 if _SPEC is None or _SPEC.loader is None:
     raise RuntimeError("Unable to load helpers module for tests")
 _HELPERS_MODULE = importlib.util.module_from_spec(_SPEC)
-sys.modules["lg_tuya_ir_helpers"] = _HELPERS_MODULE
+sys.modules["easyir_helpers"] = _HELPERS_MODULE
 _SPEC.loader.exec_module(_HELPERS_MODULE)
 
 clear_profile_cache = _HELPERS_MODULE.clear_profile_cache
@@ -111,10 +111,10 @@ class TestResolveProfileRaw(unittest.TestCase):
             # Corrupt read_text result while keeping stat mtime unchanged.
             fixed_mtime = path.stat().st_mtime_ns
             with patch(
-                "lg_tuya_ir_helpers.Path.stat",
+                "easyir_helpers.Path.stat",
                 return_value=type("Stat", (), {"st_mtime_ns": fixed_mtime})(),
             ), patch(
-                "lg_tuya_ir_helpers.Path.read_text",
+                "easyir_helpers.Path.read_text",
                 return_value="{",
             ):
                 second = resolve_profile_raw(path=str(path), action="off")

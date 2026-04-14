@@ -6,16 +6,16 @@
 
 - `hacs.json`
 - `README.md`
-- `custom_components/lg_tuya_ir/manifest.json`
-- `custom_components/lg_tuya_ir/__init__.py`
-- `custom_components/lg_tuya_ir/const.py`
-- `custom_components/lg_tuya_ir/helpers.py`
-- `custom_components/lg_tuya_ir/services.yaml`
+- `custom_components/easyir/manifest.json`
+- `custom_components/easyir/__init__.py`
+- `custom_components/easyir/const.py`
+- `custom_components/easyir/helpers.py`
+- `custom_components/easyir/services.yaml`
 
 Интеграция уже умеет:
 
-- `lg_tuya_ir.send_raw` — отправка raw таймингов через TS1201 (ZHA)
-- `lg_tuya_ir.send_profile_command` — чтение команды из profile JSON и отправка через TS1201
+- `easyir.send_raw` — отправка raw таймингов через TS1201 (ZHA)
+- `easyir.send_profile_command` — чтение команды из profile JSON и отправка через TS1201
 
 ## Как переехать
 
