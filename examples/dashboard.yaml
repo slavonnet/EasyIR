@@ -1,0 +1,27 @@
+title: EasyIR
+views:
+  - title: AC
+    path: easyir-ac
+    cards:
+      - type: entities
+        title: EasyIR Climate Entity
+        entities:
+          - entity: climate.easyir_ac
+      - type: entities
+        title: Helper Controls (optional)
+        entities:
+          - entity: input_select.easyir_hvac_mode
+          - entity: input_select.easyir_fan_mode
+          - entity: input_number.easyir_target_temp
+      - type: horizontal-stack
+        cards:
+          - type: button
+            name: OFF
+            tap_action:
+              action: call-service
+              service: script.lg_ir_power_off
+          - type: button
+            name: COOL 24 AUTO
+            tap_action:
+              action: call-service
+              service: script.lg_ir_cool_24_auto

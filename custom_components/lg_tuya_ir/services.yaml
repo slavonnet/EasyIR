@@ -1,0 +1,74 @@
+send_raw:
+  name: Send raw IR via TS1201
+  description: Encode raw mark/space timings to Tuya TS1201 base64 and send via ZHA.
+  fields:
+    ieee:
+      required: false
+      description: Optional if default IEEE is set via integration UI setup.
+      example: "8c:65:a3:ff:fe:92:63:ce"
+      selector:
+        text:
+    endpoint_id:
+      required: false
+      default: 1
+      selector:
+        number:
+          min: 1
+          max: 240
+          mode: box
+    raw_timings:
+      required: true
+      example: [3198, -9806, 487, -1553]
+      selector:
+        object:
+
+send_profile_command:
+  name: Send command from profile json
+  description: Read profile json command, convert to TS1201 format and send via ZHA.
+  fields:
+    ieee:
+      required: false
+      description: Optional if default IEEE is set via integration UI setup.
+      selector:
+        text:
+    profile_path:
+      required: false
+      description: Optional if default profile path is set via integration UI setup.
+      example: "/config/ir/7062.json"
+      selector:
+        text:
+    action:
+      required: true
+      description: "off | cool | dry"
+      selector:
+        select:
+          options:
+            - "off"
+            - "cool"
+            - "dry"
+    hvac_mode:
+      required: false
+      example: "cool"
+      selector:
+        text:
+    fan_mode:
+      required: false
+      example: "auto"
+      selector:
+        text:
+    temperature:
+      required: false
+      example: 24
+      selector:
+        number:
+          min: 16
+          max: 35
+          mode: box
+    endpoint_id:
+      required: false
+      default: 1
+      selector:
+        number:
+          min: 1
+          max: 240
+          mode: box

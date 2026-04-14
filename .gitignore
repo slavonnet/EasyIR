@@ -1,0 +1,56 @@
+# Byte-compiled / optimized
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Packaging / build
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+pip-wheel-metadata/
+
+# Test / coverage / typing
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+
+# IDE / editor
+.idea/
+*.swp
+*.swo
+*~
+
+# VS Code (keep shared settings if you want; ignore local overrides)
+.vscode/*.local.*
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Logs / local debug
+*.log
+
+# Secrets (never commit)
+.env
+.env.*
+*.pem
+secrets.yaml
+
+# Windows / tooling
+.python-version

@@ -1,0 +1,15 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "EasyIR",
+        "description": "Set default values for TS1201 IR sends.",
+        "data": {
+          "ieee": "Device IEEE",
+          "profile_path": "Default profile JSON path",
+          "endpoint_id": "Default endpoint id"
+        }
+      }
+    }
+  }
+}

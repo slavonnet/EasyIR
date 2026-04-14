@@ -1,0 +1,76 @@
+blueprint:
+  name: LG Tuya IR - AC command from helpers
+  description: >
+    Sends `lg_tuya_ir.send_profile_command` when selected helpers change.
+    This allows low-code control from UI widgets (input_select/input_number).
+  domain: automation
+  input:
+    hvac_mode_entity:
+      name: HVAC mode helper
+      description: Helper entity with values like cool/dry/off.
+      selector:
+        entity:
+          domain: input_select
+    fan_mode_entity:
+      name: Fan mode helper
+      description: Helper entity with values like auto/low/medium/high.
+      selector:
+        entity:
+          domain: input_select
+    temperature_entity:
+      name: Temperature helper
+      description: Helper entity with target temperature.
+      selector:
+        entity:
+          domain: input_number
+    ieee:
+      name: Device IEEE
+      description: IEEE address of your TS1201 device.
+      selector:
+        text:
+    profile_path:
+      name: Profile path
+      description: Path like /config/ir/7062.json.
+      selector:
+        text:
+    endpoint_id:
+      name: Endpoint ID
+      description: Usually 1 for TS1201.
+      default: 1
+      selector:
+        number:
+          min: 1
+          max: 240
+          mode: box
+
+mode: restart
+max_exceeded: silent
+
+variables:
+  hvac_mode_entity: !input hvac_mode_entity
+  fan_mode_entity: !input fan_mode_entity
+  temperature_entity: !input temperature_entity
+  ieee: !input ieee
+  profile_path: !input profile_path
+  endpoint_id: !input endpoint_id
+
+trigger:
+  - platform: state
+    entity_id: !input hvac_mode_entity
+  - platform: state
+    entity_id: !input fan_mode_entity
+  - platform: state
+    entity_id: !input temperature_entity
+
+condition: []
+
+action:
+  - service: lg_tuya_ir.send_profile_command
+    data:
+      ieee: "{{ ieee }}"
+      profile_path: "{{ profile_path }}"
+      action: "{{ states(hvac_mode_entity) }}"
+      hvac_mode: "{{ states(hvac_mode_entity) }}"
+      fan_mode: "{{ states(fan_mode_entity) }}"
+      temperature: "{{ states(temperature_entity) | int }}"
+      endpoint_id: "{{ endpoint_id | int }}"

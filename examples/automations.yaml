@@ -1,0 +1,12 @@
+# Example automation instances for EasyIR blueprints.
+
+- alias: EasyIR AC from helpers
+  use_blueprint:
+    path: lg_tuya_ir/ac_from_helpers.yaml
+    input:
+      hvac_mode_entity: input_select.easyir_hvac_mode
+      fan_mode_entity: input_select.easyir_fan_mode
+      temperature_entity: input_number.easyir_target_temp
+      ieee: "8c:65:a3:ff:fe:92:63:ce"
+      profile_path: "/config/ir/7062.json"
+      endpoint_id: 1
