@@ -5,6 +5,7 @@ SERVICE_SEND_RAW = "send_raw"
 SERVICE_SEND_COMMAND = "send_profile_command"
 CONF_IEEE = "ieee"
 CONF_PROFILE_PATH = "profile_path"
+CONF_PROFILE_CHOICE = "profile_choice"
 CONF_ENDPOINT_ID = "endpoint_id"
 DEFAULT_ENDPOINT_ID = 1
 DEFAULT_SEND_DELAY_MS = 700

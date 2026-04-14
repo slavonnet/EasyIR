@@ -1,0 +1,24 @@
+{
+  "config": {
+    "abort": {
+      "zha_not_configured": "Сначала настройте ZHA, затем добавьте EasyIR."
+    },
+    "error": {
+      "invalid_device": "Выбранное устройство не найдено.",
+      "unknown_ieee": "Не удалось прочитать Zigbee IEEE у этого устройства. Выберите другое устройство ZHA.",
+      "invalid_profile": "Выберите встроенный профиль или укажите корректный путь к своему JSON."
+    },
+    "step": {
+      "user": {
+        "title": "EasyIR",
+        "description": "Выберите устройство ZHA и встроенный профиль (коды идут с EasyIR). Свой путь — по желанию.",
+        "data": {
+          "zha_device": "Устройство ZHA",
+          "profile_choice": "IR-профиль",
+          "profile_path": "Свой путь к JSON (только если выбрали «Свой путь»)",
+          "endpoint_id": "Endpoint по умолчанию"
+        }
+      }
+    }
+  }
+}

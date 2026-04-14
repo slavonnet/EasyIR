@@ -1,0 +1,9 @@
+{
+  "profiles": [
+    {
+      "id": "demo_ac",
+      "title": "Demo AC (tiny test pattern)",
+      "file": "demo_ac.json"
+    }
+  ]
+}

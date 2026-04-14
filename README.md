@@ -12,7 +12,8 @@ Custom Home Assistant integration to send IR profile commands via Tuya TS1201 ov
 - Provides two services:
   - `easyir.send_raw`
   - `easyir.send_profile_command`
-- Supports default values from UI setup (`ieee`, `profile_path`, `endpoint_id`).
+- Ships **built-in IR profiles** in the integration package; after install you pick a profile from a list (no file hunt for the default demo).
+- Supports defaults from UI: ZHA device → resolved `ieee`, resolved `profile_path`, `endpoint_id`.
 - Includes built-in send rate-limit and profile file caching.
 
 ## Quick start (MVP 0.0.1)
@@ -30,7 +31,28 @@ Custom Home Assistant integration to send IR profile commands via Tuya TS1201 ov
 5. Restart Home Assistant.
 6. Add integration from UI:
    - `Settings -> Devices & Services -> Add Integration -> EasyIR`
-   - fill default `ieee`, `profile_path`, optional `endpoint_id`
+   - pick your **ZHA IR device** (IEEE is filled automatically)
+   - pick an **IR profile** from the list (built-in codes ship with EasyIR — start with **Demo AC** to verify wiring)
+   - optional: **Custom path** only if you chose «Custom path» in the profile list
+   - optional `endpoint_id` (often `1`)
+
+## Built-in profiles (works out of the box)
+
+IR command tables ship **inside the integration**:
+
+| Path | Role |
+|------|------|
+| `custom_components/easyir/profiles/registry.json` | Small list of extras (e.g. **Demo AC**). |
+| `custom_components/easyir/profiles/climate/*.json` | **356** bundled climate code files (numeric `NNNN.json`). |
+| `custom_components/easyir/profiles/climate_index.json` | Human titles for the setup dropdown (manufacturer / model). |
+
+**Normal user path:** install EasyIR → add integration → pick **Demo AC** (sanity check) or search the long list for your code set (e.g. **LG — P12RK** = file `7062` → value `climate/7062.json`) → no manual `/config/...` path.
+
+**Bundled climate library (bootstrap):** the `climate/*.json` set is a **temporary** compatibility layer: same general layout (`commands`, etc.) as common community climate dumps (see e.g. [this tree](https://github.com/smartHomeHub/SmartIR/tree/master/codes/climate) for reference). Long term EasyIR is meant to use **generated** profiles; refreshing this bundle is a maintainer-side offline step, not part of the runtime integration.
+
+**Advanced:** if your codes only exist under `/config/...`, choose **Custom path** and paste the full path.
+
+Format reference: [examples/profile.example.json](examples/profile.example.json).
 
 ## Service examples
 

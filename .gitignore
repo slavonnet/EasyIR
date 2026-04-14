@@ -43,6 +43,9 @@ htmlcov/
 Thumbs.db
 Desktop.ini
 
+# Local-only dev tools (clone/import scripts, experiments — not part of HA runtime)
+_local_dev/
+
 # Logs / local debug
 *.log
 

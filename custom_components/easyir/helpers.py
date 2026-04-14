@@ -58,6 +58,12 @@ def clear_profile_cache() -> None:
     _PROFILE_CACHE.clear()
 
 
+def _normalize_fan_key(fan_mode: str) -> str:
+    """Map HA-style fan names to common profile keys."""
+    aliases = {"medium": "mid"}
+    return aliases.get(fan_mode, fan_mode)
+
+
 def resolve_profile_raw(
     path: str,
     action: str,
@@ -78,5 +84,11 @@ def resolve_profile_raw(
             "For non-off actions, provide hvac_mode, fan_mode and temperature"
         )
 
-    raw = commands[action][fan_mode][str(temperature)]
+    fan_key = _normalize_fan_key(fan_mode)
+    if fan_key not in commands[action]:
+        raise ValueError(
+            f"Fan mode '{fan_mode}' not found under action '{action}' "
+            f"(tried '{fan_key}')"
+        )
+    raw = commands[action][fan_key][str(temperature)]
     return _parse_raw(raw)

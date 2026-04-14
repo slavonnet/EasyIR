@@ -16,7 +16,7 @@ input_select:
     options:
       - auto
       - low
-      - medium
+      - mid
       - high
     initial: auto
 

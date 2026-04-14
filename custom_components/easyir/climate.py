@@ -34,9 +34,9 @@ class EasyIrClimate(ClimateEntity):
     _attr_name = "AC"
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_hvac_modes = [HVACMode.OFF, HVACMode.COOL, HVACMode.DRY]
-    _attr_fan_modes = ["auto", "low", "medium", "high"]
+    _attr_fan_modes = ["auto", "low", "mid", "high"]
     _attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.FAN_MODE
-    _attr_min_temp = 16
+    _attr_min_temp = 18
     _attr_max_temp = 30
     _attr_target_temperature_step = 1
 

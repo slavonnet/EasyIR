@@ -13,7 +13,7 @@ blueprint:
           domain: input_select
     fan_mode_entity:
       name: Fan mode helper
-      description: Helper entity with values like auto/low/medium/high.
+      description: Helper entity with values like auto/low/mid/high.
       selector:
         entity:
           domain: input_select

@@ -1,12 +1,21 @@
 {
   "config": {
+    "abort": {
+      "zha_not_configured": "Configure ZHA first, then add EasyIR."
+    },
+    "error": {
+      "invalid_device": "Selected device was not found.",
+      "unknown_ieee": "Could not read Zigbee IEEE from this device. Pick another ZHA device.",
+      "invalid_profile": "Pick a built-in profile or enter a valid custom file path."
+    },
     "step": {
       "user": {
         "title": "EasyIR",
-        "description": "Set default values for TS1201 IR sends.",
+        "description": "Pick your ZHA IR device and a built-in profile (codes ship with EasyIR). Custom path is optional.",
         "data": {
-          "ieee": "Device IEEE",
-          "profile_path": "Default profile JSON path",
+          "zha_device": "ZHA device",
+          "profile_choice": "IR profile",
+          "profile_path": "Custom profile path (only if you chose Custom path)",
           "endpoint_id": "Default endpoint id"
         }
       }

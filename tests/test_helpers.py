@@ -101,6 +101,28 @@ class TestResolveProfileRaw(unittest.TestCase):
 
         self.assertEqual(result, [3198, -9806, 487, -1553])
 
+    def test_resolves_fan_mode_medium_alias(self) -> None:
+        payload = {
+            "commands": {
+                "cool": {
+                    "mid": {
+                        "24": "[1,-2,3,4]",
+                    }
+                }
+            }
+        }
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "profile.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            result = resolve_profile_raw(
+                path=str(path),
+                action="cool",
+                hvac_mode="cool",
+                fan_mode="medium",
+                temperature=24,
+            )
+        self.assertEqual(result, [1, -2, 3, 4])
+
     def test_uses_cache_when_file_unchanged(self) -> None:
         payload = {"commands": {"off": "[1,-2,3]"}}
         with tempfile.TemporaryDirectory() as temp_dir:
