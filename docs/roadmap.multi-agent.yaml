@@ -263,13 +263,13 @@ initial_backlog:
     status: Завершена
   - id: compat-migrations-tests
     content: Add migration guardrails and upgrade regression suite.
-    status: pending
+    status: В Работе
   - id: pilot-ac-vertical-slice
     content: Implement one AC protocol and one model end-to-end with capability-driven behavior.
-    status: pending
+    status: В Работе
   - id: room-aware-log-sync
     content: Implement room-aware logging, incoming decode mapping, and scoped sync.
-    status: pending
+    status: В Работе
   - id: sidebar-signal-log
     content: Deliver first EasyIR sidebar tool page (Signal Log) with backend API.
     status: pending
