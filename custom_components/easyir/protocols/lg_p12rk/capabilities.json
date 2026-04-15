@@ -10,9 +10,19 @@
   "temperature_c": {"min": 18, "max": 30, "step": 1},
   "optional_features": {
     "ionizer": {
-      "supported": false,
-      "protocol_field": null,
-      "note": "Reserved for future LG frame bit when confirmed for P12RK"
+      "supported": true,
+      "protocol_field": "command16",
+      "note": "LG universal command words (ac_LG.h); gated per profile via easyir_feature_flags"
+    },
+    "energy_saving": {
+      "supported": true,
+      "protocol_field": "command16",
+      "note": "LG universal energy-saving toggle pair"
+    },
+    "auto_clean": {
+      "supported": true,
+      "protocol_field": "command16",
+      "note": "LG universal auto-clean toggle pair"
     }
   }
 }
