@@ -185,3 +185,44 @@ Include in PR description:
 3. How it was validated.
 4. Compatibility and migration impact.
 5. Risks, limitations, and follow-ups.
+
+## 13) Orchestrator and subagent execution policy
+
+These rules are mandatory for both directly started agents and agents started by an orchestrator.
+
+### 13.1 Agent run modes
+
+1. **Directly started agent**
+   - Creates/uses its own task branch.
+   - Implements scoped task, validates, commits, pushes.
+   - Creates/updates its own PR.
+2. **Subagent started by orchestrator**
+   - Must be explicitly informed that it runs under an orchestrator.
+   - Works only in assigned task scope and assigned branch.
+   - Implements, validates, commits, pushes.
+   - Does **not** create PR unless orchestrator explicitly delegates this.
+
+### 13.2 Orchestrator responsibilities
+
+1. Orchestrator owns PR creation/update for subagent result branches.
+2. PR title and description must be written in Russian.
+3. Because several orchestrators can work in parallel, each orchestrator must choose a unique **TAG**.
+4. Orchestrator TAG must be included in all branch names created by that orchestrator.
+5. If subagent result indicates additional roadmap work is required (for example, feature done for one model but generic support still needed), orchestrator should open a separate roadmap-improvement PR with:
+   - rationale for new/adjusted tasks,
+   - roadmap updates,
+   - related documentation updates so a new agent can execute directly from updated roadmap.
+
+### 13.3 Roadmap status workflow
+
+1. Before launching any subagent for a task, orchestrator must change that task status in `docs/roadmap.multi-agent.yaml` to `В Работе`.
+2. This `В Работе` status change must be pushed to `dev` **without PR** so other orchestrators can see task lock state.
+3. Task status change to `Завершена` is done by the subagent inside its own task branch and included in task PR.
+4. Therefore, merging that PR to `dev` is the completion event for roadmap status.
+
+### 13.4 Shared workspace safety in parallel runs
+
+1. Subagents operate in shared workspace infrastructure, so branch isolation is mandatory.
+2. Each subagent must make changes only in its own branch and within assigned scope.
+3. Subagent must not modify files/areas owned by another in-progress parallel task.
+4. If overlap/conflict is discovered, subagent must stop cross-scope edits and report to orchestrator.
