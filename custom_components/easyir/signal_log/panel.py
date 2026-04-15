@@ -14,7 +14,7 @@ from ..const import DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 URL_BASE = "/easyir_static"
-PANEL_JS = "signal_log_panel.js"
+PANEL_JS = "signal_log_panel_v2.js"
 
 
 async def async_register_signal_log_panel(hass: HomeAssistant) -> None:
@@ -29,7 +29,8 @@ async def async_register_signal_log_panel(hass: HomeAssistant) -> None:
         return
 
     await hass.http.async_register_static_paths(
-        [StaticPathConfig(URL_BASE, str(static_dir), cache_headers=True)]
+        # Keep cache headers disabled to avoid stale panel JS after upgrades.
+        [StaticPathConfig(URL_BASE, str(static_dir), cache_headers=False)]
     )
 
     await panel_custom.async_register_panel(

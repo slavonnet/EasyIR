@@ -35,6 +35,7 @@ class TestSignalLogPanel(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(kwargs["webcomponent_name"], "easyir-signal-log-panel")
         self.assertFalse(kwargs["embed_iframe"])
         self.assertEqual(kwargs["frontend_url_path"], "easyir-signal-log")
+        self.assertEqual(kwargs["js_url"], "/easyir_static/signal_log_panel_v2.js")
 
     async def test_register_is_idempotent(self) -> None:
         hass = _FakeHass()
