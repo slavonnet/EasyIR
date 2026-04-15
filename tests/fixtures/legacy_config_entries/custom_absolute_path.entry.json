@@ -1,0 +1,8 @@
+{
+  "_description": "Config entry data when user selected custom profile path (absolute path outside bundled tree).",
+  "data": {
+    "ieee": "90:fd:9f:ff:fe:ab:cd:ef",
+    "profile_path": "${EASYIR_REPO_ROOT}/tests/fixtures/legacy_config_entries/minimal_ac.json",
+    "endpoint_id": 1
+  }
+}
