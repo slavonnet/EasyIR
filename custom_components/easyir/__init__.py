@@ -62,6 +62,26 @@ async def _async_encode_profile_command_for_transport(
     return await hass.async_add_executor_job(encode_call)
 
 
+async def _async_send_with_rate_limit(
+    *,
+    ieee: str,
+    send_lock_by_ieee: dict[str, asyncio.Lock],
+    last_send_by_ieee: dict[str, float],
+    send_delay_s: float,
+    send_call,
+) -> None:
+    """Serialize outbound sends per IEEE and apply cooldown after completion."""
+    lock = send_lock_by_ieee.setdefault(ieee, asyncio.Lock())
+    async with lock:
+        now = time.monotonic()
+        last_send = last_send_by_ieee.get(ieee, 0.0)
+        wait_s = send_delay_s - (now - last_send)
+        if wait_s > 0:
+            await asyncio.sleep(wait_s)
+        await send_call()
+        last_send_by_ieee[ieee] = time.monotonic()
+
+
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Migrate stored config when EasyIrConfigFlow.VERSION changes.
 
@@ -146,17 +166,6 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
             return call.data[key]
         return _default_data().get(key)
 
-    async def _apply_rate_limit(ieee: str) -> None:
-        lock = send_lock_by_ieee.setdefault(ieee, asyncio.Lock())
-        async with lock:
-            now = time.monotonic()
-            delay_s = DEFAULT_SEND_DELAY_MS / 1000.0
-            last_send = last_send_by_ieee.get(ieee, 0.0)
-            wait_s = delay_s - (now - last_send)
-            if wait_s > 0:
-                await asyncio.sleep(wait_s)
-            last_send_by_ieee[ieee] = time.monotonic()
-
     async def handle_send_raw(call: ServiceCall) -> None:
         ieee = _get_merged_value(call, CONF_IEEE)
         if not ieee:
@@ -166,12 +175,18 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         raw_timings = call.data["raw_timings"]
         frame, code = encode_raw_timings_for_zha_ts1201(raw_timings)
         _LOGGER.debug("Generated Tuya code for %s: %s", ieee, code)
-        await _apply_rate_limit(ieee)
         transport: IrTransport = hass.data[DOMAIN]["ir_transport"]
-        await transport.send(
-            hass,
-            code,
-            TransportSendContext(ieee=ieee, endpoint_id=endpoint_id),
+        await _async_send_with_rate_limit(
+            ieee=str(ieee),
+            send_lock_by_ieee=send_lock_by_ieee,
+            last_send_by_ieee=last_send_by_ieee,
+            send_delay_s=DEFAULT_SEND_DELAY_MS / 1000.0,
+            send_call=partial(
+                transport.send,
+                hass,
+                code,
+                TransportSendContext(ieee=ieee, endpoint_id=endpoint_id),
+            ),
         )
         entry_data = _entry_data_for_ieee(hass, ieee) or {}
         log_outbound_send(
@@ -208,12 +223,18 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
             ieee,
             call.data["action"],
         )
-        await _apply_rate_limit(ieee)
         transport: IrTransport = hass.data[DOMAIN]["ir_transport"]
-        await transport.send(
-            hass,
-            code,
-            TransportSendContext(ieee=ieee, endpoint_id=endpoint_id),
+        await _async_send_with_rate_limit(
+            ieee=str(ieee),
+            send_lock_by_ieee=send_lock_by_ieee,
+            last_send_by_ieee=last_send_by_ieee,
+            send_delay_s=DEFAULT_SEND_DELAY_MS / 1000.0,
+            send_call=partial(
+                transport.send,
+                hass,
+                code,
+                TransportSendContext(ieee=ieee, endpoint_id=endpoint_id),
+            ),
         )
         entry_data = _entry_data_for_ieee(hass, ieee) or {}
         log_outbound_send(
