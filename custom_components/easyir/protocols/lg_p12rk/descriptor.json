@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "protocol_id": "lg_ac_irremoteesp8266_v1",
+  "display_name": "LG AC 28-bit frame (IRremoteESP8266 IRLgAc / union LGProtocol)",
+  "pilot_models": ["P12RK"],
+  "reference": "https://github.com/crankyoldgit/IRremoteESP8266/blob/master/src/ir_LG.h",
+  "bit_layout_uint32_lsb": {
+    "total_significant_bits": 28,
+    "fields_low_to_high": [
+      {"name": "checksum", "width_bits": 4, "algorithm": "sum_low_16_bits_of_command"},
+      {"name": "fan", "width_bits": 4},
+      {"name": "temperature_raw", "width_bits": 4, "celsius": "raw + 15"},
+      {"name": "mode", "width_bits": 3},
+      {"name": "reserved", "width_bits": 3, "value_fixed": 0},
+      {"name": "power", "width_bits": 2},
+      {"name": "signature", "width_bits": 8, "value_fixed": "0x88"}
+    ],
+    "command_16": "bits 4..19 inclusive (used for checksum nibble)"
+  },
+  "constants": {
+    "signature": 136,
+    "power_on": 0,
+    "power_off": 3,
+    "mode_cool": 0,
+    "mode_dry": 1,
+    "mode_fan": 2,
+    "mode_auto": 3,
+    "mode_heat": 4,
+    "fan_auto": 5,
+    "fan_low": 1,
+    "fan_medium": 2,
+    "fan_high": 4,
+    "fan_lowest": 0,
+    "off_command_hex": "0x88C0051"
+  },
+  "timing_profile": "lg2_ac",
+  "timing_profiles": {
+    "lg2_ac": {
+      "carrier_frequency_hz": 38000,
+      "header_mark_us": 3200,
+      "header_space_us": 9900,
+      "bit_mark_us": 480,
+      "one_space_us": 1600,
+      "zero_space_us": 550,
+      "trailing_mark_us": 480,
+      "message_gap_us": 39750
+    }
+  }
+}

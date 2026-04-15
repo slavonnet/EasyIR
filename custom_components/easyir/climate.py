@@ -16,6 +16,7 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import CONF_ENDPOINT_ID, CONF_IEEE, CONF_PROFILE_PATH, DOMAIN, SERVICE_SEND_COMMAND
+from .protocols.lg_p12rk import climate_capability_view
 
 
 async def async_setup_entry(
@@ -47,6 +48,8 @@ class EasyIrClimate(ClimateEntity):
         self._ieee = str(entry.data[CONF_IEEE])
         self._profile_path = str(entry.data[CONF_PROFILE_PATH])
         self._endpoint_id = int(entry.data[CONF_ENDPOINT_ID])
+        self._cap_view = climate_capability_view(self._profile_path)
+        self._apply_capability_view(self._cap_view)
         self._attr_unique_id = f"{entry.entry_id}_climate"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, self._ieee)},
@@ -57,6 +60,44 @@ class EasyIrClimate(ClimateEntity):
         self._attr_hvac_mode = HVACMode.OFF
         self._attr_fan_mode = "auto"
         self._attr_target_temperature = 24
+
+    def _apply_capability_view(self, view: dict) -> None:
+        """Set entity mode/temperature constraints from capability map when pilot."""
+        if not view.get("pilot"):
+            self._attr_hvac_modes = [HVACMode.OFF, HVACMode.COOL, HVACMode.DRY]
+            self._attr_fan_modes = ["auto", "low", "mid", "high"]
+            self._attr_min_temp = 18
+            self._attr_max_temp = 30
+            self._attr_target_temperature_step = 1
+            self._attr_extra_state_attributes = {}
+            return
+
+        mode_map = {
+            "off": HVACMode.OFF,
+            "cool": HVACMode.COOL,
+            "dry": HVACMode.DRY,
+            "heat": HVACMode.HEAT,
+            "fan_only": HVACMode.FAN_ONLY,
+            "auto": HVACMode.AUTO,
+        }
+        hvac_ids = [str(x) for x in view.get("hvac_modes", [])]
+        modes: list[HVACMode] = []
+        for mid in hvac_ids:
+            ha_mode = mode_map.get(mid)
+            if ha_mode is not None and ha_mode not in modes:
+                modes.append(ha_mode)
+        self._attr_hvac_modes = modes
+
+        self._attr_fan_modes = [str(x) for x in view.get("fan_modes", [])]
+        tc = view.get("temperature_c") or {}
+        self._attr_min_temp = float(tc.get("min", 18))
+        self._attr_max_temp = float(tc.get("max", 30))
+        self._attr_target_temperature_step = float(tc.get("step", 1))
+        self._attr_extra_state_attributes = {
+            "easyir_protocol": view.get("protocol"),
+            "easyir_pilot": True,
+            "easyir_ionizer_supported": bool(view.get("ionizer_supported")),
+        }
 
     async def _send(self, data: dict[str, Any]) -> None:
         """Send command via integration service."""
