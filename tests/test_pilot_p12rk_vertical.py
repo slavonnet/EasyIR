@@ -102,7 +102,10 @@ class TestClimateInboundFeatureFlags(unittest.TestCase):
             CONF_PROFILE_PATH: str(PROFILE_7062),
             CONF_ENDPOINT_ID: 1,
         }
-        entity = EasyIrClimate(hass, entry)
+        from custom_components.easyir.protocols.lg_p12rk import climate_capability_view
+
+        cap_view = climate_capability_view(str(PROFILE_7062))
+        entity = EasyIrClimate(hass, entry, cap_view=cap_view)
         self.assertTrue(entity._cap_view.get("pilot"))
         self.assertTrue(entity._cap_view.get("ionizer_supported"))
 
