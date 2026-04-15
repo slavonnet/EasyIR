@@ -10,7 +10,7 @@ from typing import Any
 class CanonicalIRFrame:
     """Normalized IR transmission intent (codec / transport adapters consume this).
 
-    Field semantics follow docs/roadmap.multi-agent.yaml (canonical_model.required_fields).
+    Field semantics follow the active agent roadmap (see docs/agents-roadmap-example.md).
     Unknown physical-layer parameters are represented with None and/or empty metadata.
     """
 

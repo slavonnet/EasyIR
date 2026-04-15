@@ -4,7 +4,7 @@ Operational rules for contributors and coding agents working on EasyIR.
 
 ## 1) Product vision (target architecture)
 
-The current repository is an MVP. The target product is a full IR platform for Home Assistant:
+The current repository is an incomplete release. The target product is a full IR platform for Home Assistant:
 
 - support multiple IR transports/hubs: Wi-Fi, ZigBee, USB, ESPHome;
 - support multiple IR message encodings and conversion between formats;
@@ -14,7 +14,7 @@ The current repository is an MVP. The target product is a full IR platform for H
 - provide first-class tools in a dedicated Home Assistant sidebar section (`EasyIR`).
 
 If `README.md` and this file diverge, treat this file as roadmap and engineering policy for new work.
-Current TS1201/ZHA logic in the MVP is a legacy adapter path, not a product-level architecture constraint.
+Current TS1201/ZHA logic in the release is a legacy adapter path, not a product-level architecture constraint.
 
 ## 2) Compatibility policy (hard requirement)
 
@@ -64,7 +64,7 @@ Rules:
   - remote auto-detection,
   - guided pairing/selection helpers.
 
-## 4) Repository map (current MVP layout)
+## 4) Repository map (current layout)
 
 - `custom_components/easyir/`
   - `__init__.py` integration setup and service registration.
@@ -82,9 +82,10 @@ Rules:
 
 ## 5) Parallel execution plan for multiple agents
 
-This section below was originally drafted as a minimal MVP-oriented execution example.
-For active multi-agent planning and task orchestration, use `docs/roadmap.multi-agent.yaml` as
-the primary source of truth (detailed TR, dependencies, pilot-first sequencing, task templates).
+This section below was originally drafted as a minimal execution example.
+For active multi-agent planning and task orchestration, use the active project roadmap file
+(created from `docs/agents-roadmap-example.md`) as the primary source of truth
+(detailed TR, dependencies, pilot-first sequencing, task templates).
 
 Use separate branches and PRs per workstream. Keep each PR narrow and mergeable.
 
@@ -114,7 +115,7 @@ Recommended workstreams:
 
 Each agent must:
 - know this target vision before implementing;
-- state assumptions if MVP code cannot yet support target behavior;
+- state assumptions if current code cannot yet support target behavior;
 - deliver incremental, backward-compatible slices.
 
 ## 6) Git and PR hygiene (public history policy)
@@ -144,7 +145,7 @@ Rules:
 Run from repo root:
 
 ```bash
-python -m unittest discover -s tests -v
+python3 -m unittest discover -s tests -v
 ```
 
 If only docs changed, mention tests were not required. If runtime code changed, run tests before finalizing.
@@ -217,7 +218,7 @@ These rules are mandatory for both directly started agents and agents started by
 
 ### 13.3 Roadmap status workflow
 
-1. Before launching any subagent for a task, orchestrator must change that task status in `docs/roadmap.multi-agent.yaml` to `В Работе`.
+1. Before launching any subagent for a task, orchestrator must change that task status in the active roadmap file (created from `docs/agents-roadmap-example.md`) to `В Работе`.
 2. Orchestrator must commit and push this `В Работе` status change to `dev` **without PR** so other orchestrators can see task lock state.
 3. Launching any subagent is allowed only after this push to `dev` is successfully completed (no exceptions).
 4. Task status change to `Завершена` is done by the subagent inside its own task branch and included in task PR.
