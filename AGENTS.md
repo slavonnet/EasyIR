@@ -162,9 +162,9 @@ This section describes project policy expectations that must be reflected in rep
 
 1. Code reuse is allowed only with mandatory attribution to author and project name.
 2. Forking with a new name is allowed only if original project had no changes for at least one year.
-3. PR-based contribution policy: contributor transfers rights to submitted code and guarantees submitted code does not include third-party protected parts that cannot be transferred.
+3. PR-based contribution policy: contributor grants the rights described in [`CONTRIBUTING.md`](CONTRIBUTING.md) for submitted code and warrants that submitted material does not include anything they cannot license to the project under those terms.
 
-If formal legal files are missing or inconsistent, open a dedicated legal-doc PR to align `LICENSE`/`CONTRIBUTING`/PR template with this policy text.
+Repository legal and contribution text lives in [`LICENSE`](LICENSE), [`CONTRIBUTING.md`](CONTRIBUTING.md), and [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md); keep them consistent with this section when policy wording changes.
 
 ## 11) Definition of done
 

@@ -19,6 +19,10 @@ prepare derivative works of, publicly display, publicly perform, sublicense, and
 distribute your contribution as part of the project, including for maintenance,
 release, and promotion of EasyIR.
 
+For clarity, this grant includes the rights needed for maintainers to incorporate
+your contribution into the project and to exercise those rights on behalf of the
+project under the then-current project license, consistent with typical open-source
+collaboration.
 You represent and warrant that you have sufficient rights to grant the license
 above for everything you submit in the pull request.
 
