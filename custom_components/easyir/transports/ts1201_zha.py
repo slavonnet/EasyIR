@@ -14,6 +14,7 @@ from ..const import (
     ZHA_DOMAIN,
     ZHA_SERVICE,
 )
+from ..command_pool import async_call_pooled_service
 from .base import TransportSendContext
 
 
@@ -31,11 +32,13 @@ class Ts1201ZhaTransport:
             "command_type": TS1201_COMMAND_TYPE,
             "params": {"code": code},
         }
-        await hass.services.async_call(
-            ZHA_DOMAIN,
-            ZHA_SERVICE,
-            payload,
-            blocking=True,
+        await async_call_pooled_service(
+            hass,
+            ieee=str(ctx.ieee),
+            domain=ZHA_DOMAIN,
+            service=ZHA_SERVICE,
+            data=payload,
+            return_response=False,
         )
 
     def describe(self) -> dict[str, Any]:
