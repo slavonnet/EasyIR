@@ -159,6 +159,20 @@ workstreams:
     pr_guidelines:
       - Single protocol and single model only.
       - End-to-end behavior preferred over broad but shallow support.
+  - id: ws-lg-universal-bit-engine
+    title: Universal LG AC bit engine and feature flags
+    depends_on: []
+    can_run_parallel: true
+    scope:
+      - Implement universal LG AC command builder/parser from protocol bitfields (not precomputed command combinatorics).
+      - Base protocol behavior on Arduino-IRremote LG AC references (`ac_LG.h` and `ac_LG.hpp`).
+      - Move LG profile modeling to "protocol + supported feature flags" instead of model-specific command matrix.
+      - Integrate protocol-based command generation into send path with backward-compatible fallback to legacy raw profile commands.
+      - Add deterministic tests for encode/decode and feature-flag extraction.
+    pr_guidelines:
+      - Keep easyir.send_raw and easyir.send_profile_command contract unchanged.
+      - Keep existing profile-path compatibility; do not break configured entries.
+      - Explicitly document parity limits and unsupported flags.
   - id: ws-room-log-sync
     title: Room-aware signal log and state sync
     depends_on: [ws-core-codec, ws-transport-hub]
@@ -243,7 +257,7 @@ initial_backlog:
     status: Завершена
   - id: core-codec-foundation
     content: Implement canonical IR model + codec registry + service compatibility adapter.
-    status: pending
+    status: В Работе
   - id: transport-abstraction
     content: Introduce transport interface, migrate TS1201 adapter, add supported hub discovery filters.
     status: pending
@@ -268,6 +282,11 @@ initial_backlog:
   - id: protocol-scale-template
     content: Publish reusable protocol onboarding task template for parallel agents.
     status: Завершена
+  - id: lg-universal-bit-engine
+    content: >
+      Implement universal LG bit-level encode/decode + feature-flag model and wire it into
+      profile-driven send/decode flow with backward-compatible fallback.
+    status: В Работе
 
 agent_task_templates:
   protocol_slice:
@@ -465,3 +484,34 @@ agent_prompt_packets:
       - Sidebar polish beyond minimal API hooks.
     acceptance_criteria:
       - Both assistant flows complete for pilot with test-backed deterministic outcomes.
+  packet_lg_universal_bit_engine:
+    branch_name: cursor/ws-lg-universal-bit-engine-orchlg47b4-1bfb
+    workstream_id: ws-lg-universal-bit-engine
+    objective: >
+      Replace LG model-specific command combinatorics with universal bit-level protocol
+      encode/decode and feature-flag driven behavior.
+    references:
+      - https://raw.githubusercontent.com/Arduino-IRremote/Arduino-IRremote/refs/heads/master/src/ac_LG.h
+      - https://raw.githubusercontent.com/Arduino-IRremote/Arduino-IRremote/refs/heads/master/src/ac_LG.hpp
+    required_gap_findings_to_preserve:
+      - Current send path still resolves precomputed profile raw timings (combinatoric matrix).
+      - Current LG encoder/decoder is not wired into service send pipeline.
+      - Current protocol binding is model-specific (P12RK), not universal protocol + flags.
+      - Current feature coverage is narrow (mainly mode/temp/fan; missing broader LG command flags).
+      - Decode path lacks strict checksum/signature validation and explicit flag extraction contract.
+    in_scope:
+      - Introduce universal LG protocol descriptor/engine using bitfields and command flags.
+      - Add profile metadata schema for protocol id + supported feature flags.
+      - Add command-generation adapter for LG profiles with legacy fallback.
+      - Add decode mapping that returns normalized state delta + extracted feature flags.
+      - Add tests for universal encode/decode and fallback compatibility.
+    out_of_scope:
+      - Non-LG protocol implementations.
+      - Sidebar/assistant UX changes.
+    compatibility_constraints:
+      - Do not change easyir.send_raw / easyir.send_profile_command external contract.
+      - Keep existing profile paths and existing config entries functioning.
+    acceptance_criteria:
+      - LG command generation no longer depends on full combinatoric command storage for covered flags.
+      - Feature flags are represented in profile metadata and enforced by encoder/decoder.
+      - Legacy profile-command sends still work via fallback path.
