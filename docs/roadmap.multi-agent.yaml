@@ -272,7 +272,7 @@ initial_backlog:
     status: Завершена
   - id: sidebar-signal-log
     content: Deliver first EasyIR sidebar tool page (Signal Log) with backend API.
-    status: pending
+    status: Завершена
   - id: assistants-pilot
     content: Deliver pilot remote auto-detect and guided pairing flows.
     status: Завершена

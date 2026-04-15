@@ -29,7 +29,9 @@ from .ir_core.service_adapter import (
     encode_profile_command_for_zha_ts1201,
     encode_raw_timings_for_zha_ts1201,
 )
+from .signal_log.api import async_register_signal_log_api
 from .signal_log.ha_bridge import async_setup_inbound_listener, log_outbound_send
+from .signal_log.panel import async_register_signal_log_panel
 from .transports import Ts1201ZhaTransport
 from .transports.base import IrTransport, TransportSendContext
 
@@ -95,6 +97,7 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     hass.data[DOMAIN].setdefault("climate_entities", {})
     hass.data[DOMAIN].setdefault("ir_transport", Ts1201ZhaTransport())
     async_setup_inbound_listener(hass)
+    async_register_signal_log_api(hass)
     send_lock_by_ieee: dict[str, asyncio.Lock] = {}
     last_send_by_ieee: dict[str, float] = {}
 
@@ -210,6 +213,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN].setdefault("ir_transport", Ts1201ZhaTransport())
     hass.data[DOMAIN][entry.entry_id] = entry.data
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    await async_register_signal_log_panel(hass)
     return True
 
 
