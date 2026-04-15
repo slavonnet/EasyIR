@@ -39,7 +39,7 @@ async def async_register_signal_log_panel(hass: HomeAssistant) -> None:
         sidebar_title="EasyIR Signal Log",
         sidebar_icon="mdi:remote",
         js_url=f"{URL_BASE}/{PANEL_JS}",
-        embed_iframe=True,
+        embed_iframe=False,
         require_admin=False,
         config_panel_domain=DOMAIN,
     )
