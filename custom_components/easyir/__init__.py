@@ -30,7 +30,10 @@ from .const import (
     ZHA_DOMAIN,
     ZHA_SERVICE,
 )
-from .helpers import encode_raw_to_tuya_base64, resolve_profile_raw
+from .ir_core.service_adapter import (
+    encode_profile_command_for_zha_ts1201,
+    encode_raw_timings_for_zha_ts1201,
+)
 from .signal_log.ha_bridge import async_setup_inbound_listener, log_outbound_send
 
 _LOGGER = logging.getLogger(__name__)
@@ -128,7 +131,7 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
 
         endpoint_id = _get_merged_value(call, CONF_ENDPOINT_ID) or TS1201_ENDPOINT_ID
         raw_timings = call.data["raw_timings"]
-        code = encode_raw_to_tuya_base64(raw_timings)
+        frame, code = encode_raw_timings_for_zha_ts1201(raw_timings)
         _LOGGER.debug("Generated Tuya code for %s: %s", ieee, code)
         await _apply_rate_limit(ieee)
         await _send_tuya_ir(hass, ieee, code, endpoint_id)
@@ -136,7 +139,7 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         log_outbound_send(
             hass,
             ieee=ieee,
-            timings=raw_timings,
+            timings=frame.timings,
             entity_id=None,
             entry_data=entry_data,
             protocol_hint="raw_timings",
@@ -154,14 +157,13 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
             )
 
         endpoint_id = _get_merged_value(call, CONF_ENDPOINT_ID) or TS1201_ENDPOINT_ID
-        raw_timings = resolve_profile_raw(
-            path=profile_path,
+        frame, code = encode_profile_command_for_zha_ts1201(
+            profile_path=profile_path,
             action=call.data["action"],
             hvac_mode=call.data.get("hvac_mode"),
             fan_mode=call.data.get("fan_mode"),
             temperature=call.data.get("temperature"),
         )
-        code = encode_raw_to_tuya_base64(raw_timings)
         _LOGGER.debug(
             "Generated profile->Tuya code for %s action=%s",
             ieee,
@@ -173,7 +175,7 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         log_outbound_send(
             hass,
             ieee=ieee,
-            timings=raw_timings,
+            timings=frame.timings,
             entity_id=None,
             entry_data=entry_data,
             protocol_hint="profile",
