@@ -82,6 +82,10 @@ Rules:
 
 ## 5) Parallel execution plan for multiple agents
 
+This section below was originally drafted as a minimal MVP-oriented execution example.
+For active multi-agent planning and task orchestration, use `docs/roadmap.multi-agent.yaml` as
+the primary source of truth (detailed TR, dependencies, pilot-first sequencing, task templates).
+
 Use separate branches and PRs per workstream. Keep each PR narrow and mergeable.
 
 Recommended workstreams:

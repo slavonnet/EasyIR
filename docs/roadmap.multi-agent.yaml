@@ -1,0 +1,465 @@
+name: EasyIR multi-agent roadmap
+version: 1
+last_updated: 2026-04-15
+status: active
+overview: >
+  Transition EasyIR from MVP (TS1201/ZHA + static profiles) to a universal IR platform
+  for Home Assistant with multi-hub support (WiFi/ZigBee/USB/ESPHome), protocol-aware
+  command generation/parsing, capability-driven virtual devices, room-aware logging/sync,
+  assistants, and sidebar tools. Development is split into small, reviewable PR slices
+  with clean public history and strict backward compatibility.
+
+principles:
+  - README describes current MVP state; this roadmap describes target architecture.
+  - Backward compatibility for configured users is mandatory.
+  - Services easyir.send_raw and easyir.send_profile_command are stable API unless versioned.
+  - Public git history must contain only reviewable final commits (no noisy WIP/debug chains).
+  - New functionality is delivered as small vertical slices; first complete one pilot protocol.
+
+technical_requirements:
+  compatibility:
+    hard_requirements:
+      - Existing config entries continue working after upgrade without re-adding hubs/devices.
+      - Existing bundled profile paths remain compatibility contract within major line.
+      - Any profile path change requires alias/stub or async_migrate_entry migration.
+      - Profile schema evolution is additive in major line unless explicit version break is introduced.
+      - Any path/profile resolution change must include tests proving legacy entries still send commands.
+  ir_core:
+    canonical_model:
+      required_fields:
+        - carrier_frequency_hz
+        - timings
+        - repeat
+        - duty_cycle
+        - protocol_hint
+        - integrity_metadata
+      requirements:
+        - Canonical frame is transport-agnostic and protocol-aware.
+        - Canonical frame supports decode confidence and unknown fields passthrough.
+    codec_registry:
+      requirements:
+        - Bidirectional conversion: raw timings <-> canonical IR frame.
+        - Transport payload adapters: canonical IR frame <-> transport-specific payload.
+        - Extensible registration model for new codecs without changing service contracts.
+  protocol_capability_layer:
+    requirements:
+      - Protocol descriptor schema defines bit/field layout, command map, constraints, and checksums.
+      - Capability matrix represents supported functions per protocol/device class.
+      - Virtual device behavior (entity/widget/actions) is generated from capability matrix.
+      - Profile database is metadata/capability constraints over protocol descriptors, not static code DB.
+  transports_and_hubs:
+    requirements:
+      - Common transport adapter interface: send(), and later receive()/subscribe().
+      - First migration target is legacy TS1201 path via new transport abstraction.
+      - Automatic discovery filters only supported hub types/models.
+      - Newly discovered supported-but-not-configured hubs are suggested for onboarding.
+      - Multi-hub and many virtual end devices must be supported concurrently.
+  incoming_pipeline_and_sync:
+    requirements:
+      - Incoming IR events are normalized and decoded to intent/state delta.
+      - State sync updates only virtual devices visible in the event room scope.
+      - If decoded signal cannot be mapped to existing visible device, suggest adding device type.
+      - If room filter excludes device visibility, do not trigger add/sync actions.
+  room_awareness:
+    requirements:
+      - Every virtual IR device belongs to explicit room scope.
+      - Hub visibility map to rooms is explicit and enforced in log/sync/assistants.
+      - Cross-room false-positive synchronization is blocked by policy.
+  assistants:
+    remote_autodetection:
+      - Capture remote signal -> decode protocol -> infer capabilities -> propose profile binding.
+    guided_pairing_no_remote:
+      - Send candidate commands -> collect user reaction -> infer protocol/profile confidence.
+  ha_sidebar_and_tools:
+    requirements:
+      - Dedicated EasyIR sidebar section.
+      - Tools exposed incrementally: Signal Log, Format Transcoder, Remote Auto-detect, Guided Pairing.
+      - Dynamic widgets/cards adapt to capability model instead of hardcoded mode sets.
+  legal_governance:
+    requirements:
+      - Reuse policy mandates attribution to author and project name.
+      - Fork with new name allowed only if upstream had no changes for >=1 year.
+      - PR contributions include transfer-of-rights and third-party rights warranty policy.
+
+delivery_strategy:
+  phase_0_baseline:
+    goal: Freeze MVP baseline and compatibility invariants before architectural expansion.
+    outputs:
+      - Compatibility contract document for services/config/profile paths.
+      - Upgrade regression checklist.
+  phase_1_foundation:
+    goal: Introduce canonical IR core and transport abstraction behind existing APIs.
+    outputs:
+      - Canonical IR model.
+      - Codec registry interfaces and first adapters.
+      - TS1201 migrated behind transport interface.
+  phase_2_pilot_vertical_slice:
+    goal: Implement one full protocol/device slice end-to-end before scaling.
+    outputs:
+      - One AC protocol descriptor + parser + generator.
+      - One model profile constraint set.
+      - Capability-driven entity/widget behavior.
+      - Inbound decode + room-aware sync + logging for pilot.
+      - Assistant flows usable for pilot.
+  phase_3_parallel_scale:
+    goal: Scale protocols/devices/transports by repeating validated pilot template.
+    outputs:
+      - Parallel protocol onboarding in small independent PRs.
+      - Sidebar tools expansion and assistant quality improvements.
+
+workstreams:
+  - id: ws-baseline-audit
+    title: Baseline compatibility audit
+    depends_on: []
+    can_run_parallel: false
+    scope:
+      - Capture compatibility invariants for services/config/profile paths.
+      - Add regression fixtures for legacy config entries.
+    pr_guidelines:
+      - No runtime behavior change.
+      - Documentation + tests only.
+  - id: ws-core-codec
+    title: Canonical IR core and codec registry
+    depends_on: [ws-baseline-audit]
+    can_run_parallel: false
+    scope:
+      - Add core canonical frame model and codec registry API.
+      - Add compatibility adapter used by existing service handlers.
+    pr_guidelines:
+      - Preserve API of easyir.send_raw and easyir.send_profile_command.
+      - No transport-specific assumptions in core package.
+  - id: ws-transport-hub
+    title: Transport abstraction and hub onboarding
+    depends_on: [ws-core-codec]
+    can_run_parallel: false
+    scope:
+      - Introduce transport adapter interface and TS1201 migration.
+      - Add supported hub filtering and onboarding suggestions.
+    pr_guidelines:
+      - Backward-compatible migration path for existing ZHA users.
+      - Avoid changing unrelated protocol logic.
+  - id: ws-compat-guardrails
+    title: Migration guardrails and upgrade regression
+    depends_on: [ws-core-codec, ws-transport-hub]
+    can_run_parallel: false
+    scope:
+      - Add async_migrate_entry where needed.
+      - Add compatibility tests for profile path and config entry migration.
+    pr_guidelines:
+      - Must pass legacy send scenarios.
+  - id: ws-pilot-protocol
+    title: Pilot protocol and capability engine
+    depends_on: [ws-core-codec]
+    can_run_parallel: true
+    scope:
+      - Implement one AC protocol descriptor/parser/generator.
+      - Map pilot model capabilities (example: ionizer support flag).
+      - Integrate with entity model via capability engine.
+    pr_guidelines:
+      - Single protocol and single model only.
+      - End-to-end behavior preferred over broad but shallow support.
+  - id: ws-room-log-sync
+    title: Room-aware signal log and state sync
+    depends_on: [ws-core-codec, ws-transport-hub]
+    can_run_parallel: true
+    scope:
+      - Event log storage and room visibility policy.
+      - Incoming decode -> scoped sync pipeline.
+      - Unknown decoded signal -> add-device suggestion logic.
+    pr_guidelines:
+      - Strict room filter enforcement.
+      - No cross-room sync side effects.
+  - id: ws-sidebar-widgets
+    title: Sidebar tools and dynamic widgets
+    depends_on: [ws-pilot-protocol, ws-room-log-sync]
+    can_run_parallel: true
+    scope:
+      - Backend API for EasyIR sidebar tools.
+      - Signal Log page first, then transcoder and assistants pages.
+      - Capability-driven widget adaptation.
+    pr_guidelines:
+      - Deliver one tool/page per PR when possible.
+  - id: ws-assistants
+    title: Auto-detect and guided pairing assistants
+    depends_on: [ws-pilot-protocol, ws-room-log-sync]
+    can_run_parallel: true
+    scope:
+      - Remote capture/decode/infer workflow.
+      - No-remote probing workflow with confidence scoring.
+    pr_guidelines:
+      - Keep flows deterministic and testable with fixtures/mocks.
+  - id: ws-legal-governance
+    title: Legal docs and contribution policy alignment
+    depends_on: []
+    can_run_parallel: true
+    scope:
+      - Align LICENSE/CONTRIBUTING/PR template with licensing and PR rights policy.
+    pr_guidelines:
+      - Docs-only PR.
+
+parallel_execution_template:
+  intent: >
+    Template for orchestrator agent to launch multiple implementation agents in parallel
+    with consistent context and strict PR hygiene.
+  required_context_for_every_agent:
+    - This roadmap file is source of truth for target architecture and sequencing.
+    - README reflects MVP and does not limit target architecture.
+    - Backward compatibility constraints are mandatory.
+    - Keep PR narrow; avoid unrelated refactors and formatting churn in profile data.
+    - Keep clean history: final logical commits only.
+  task_packet_fields:
+    - objective
+    - in_scope
+    - out_of_scope
+    - concrete_files_to_touch
+    - compatibility_constraints
+    - migrations_needed
+    - tests_to_add_or_run
+    - acceptance_criteria
+    - known_risks_and_assumptions
+  branch_and_pr_policy:
+    - One workstream per branch and PR.
+    - One logical commit per small feature slice when feasible.
+    - Do not push noisy exploratory commits.
+    - PR body includes: what/why/validation/compatibility impact/risks.
+
+pilot_first_rule:
+  statement: >
+    Implement first complete vertical slice for one AC protocol + one model before
+    adding additional protocols in parallel.
+  required_completion_for_pilot:
+    - Protocol descriptor parser+generator working.
+    - Capability mapping integrated with climate entity/widget.
+    - Incoming decode logs and room-aware state sync.
+    - Basic assistant flows available for pilot.
+  scale_out_after_pilot:
+    - Add protocol/model pairs as separate small PRs following same template.
+    - Run in parallel only after pilot APIs stabilize.
+
+initial_backlog:
+  - id: baseline-audit
+    content: Lock compatibility invariants and create baseline regression fixtures.
+    status: В Работе
+  - id: core-codec-foundation
+    content: Implement canonical IR model + codec registry + service compatibility adapter.
+    status: pending
+  - id: transport-abstraction
+    content: Introduce transport interface, migrate TS1201 adapter, add supported hub discovery filters.
+    status: pending
+  - id: compat-migrations-tests
+    content: Add migration guardrails and upgrade regression suite.
+    status: pending
+  - id: pilot-ac-vertical-slice
+    content: Implement one AC protocol and one model end-to-end with capability-driven behavior.
+    status: pending
+  - id: room-aware-log-sync
+    content: Implement room-aware logging, incoming decode mapping, and scoped sync.
+    status: pending
+  - id: sidebar-signal-log
+    content: Deliver first EasyIR sidebar tool page (Signal Log) with backend API.
+    status: pending
+  - id: assistants-pilot
+    content: Deliver pilot remote auto-detect and guided pairing flows.
+    status: pending
+  - id: legal-docs-alignment
+    content: Align legal and contribution documentation with project licensing policy.
+    status: В Работе
+  - id: protocol-scale-template
+    content: Publish reusable protocol onboarding task template for parallel agents.
+    status: В Работе
+
+agent_task_templates:
+  protocol_slice:
+    objective: Add one protocol+one model using established pilot pattern.
+    in_scope:
+      - Descriptor schema mapping for target protocol.
+      - Parser and generator for target protocol.
+      - Capability matrix for one target model.
+      - Tests for encode/decode/capability mapping.
+    out_of_scope:
+      - Other protocols or broad UI redesign.
+      - Unrelated transport changes.
+    acceptance_criteria:
+      - Command generation parity for covered actions.
+      - Decode roundtrip tests pass.
+      - Capability-driven widget/entity behavior demonstrated.
+  transport_slice:
+    objective: Add one new hub transport adapter.
+    in_scope:
+      - Adapter implementing shared transport interface.
+      - Discovery filter and onboarding hooks for the adapter.
+      - Compatibility and integration tests.
+    out_of_scope:
+      - Protocol engine rewrites.
+      - Sidebar tool changes.
+    acceptance_criteria:
+      - Existing transports unaffected.
+      - New transport can send canonical frame payloads.
+  assistant_slice:
+    objective: Improve one assistant flow with deterministic inference.
+    in_scope:
+      - One bounded UX/API improvement.
+      - Confidence scoring and decision logging.
+      - Tests for inference branch logic.
+    out_of_scope:
+      - New protocol support beyond required fixtures.
+    acceptance_criteria:
+      - Reproducible inference outcome for test fixtures.
+      - No regression in existing assistant API.
+
+first_wave_execution_plan:
+  objective: >
+    Provide immediately executable launch order for orchestrating separate agents
+    with minimal coupling and clean PR history.
+  gate_0_preparation:
+    required_before_any_parallel_run:
+      - Ensure ws-baseline-audit is merged.
+      - Ensure ws-core-codec is merged.
+      - Ensure ws-transport-hub is merged.
+      - Ensure ws-compat-guardrails is merged.
+    outputs:
+      - Stable internal interfaces for protocol and room-aware pipelines.
+      - Migration/compatibility safety net for next PR waves.
+  wave_1a_parallel:
+    description: First parallel implementation wave after foundation gates pass.
+    launch_together:
+      - ws-pilot-protocol
+      - ws-room-log-sync
+      - ws-legal-governance
+    branch_examples:
+      - cursor/ws-pilot-protocol-lg-p12rk-47b4
+      - cursor/ws-room-log-sync-core-47b4
+      - cursor/ws-legal-governance-docs-47b4
+    merge_gate_for_next_wave:
+      - Pilot protocol APIs are stable and tested.
+      - Room-aware event model is merged.
+  wave_1b_parallel:
+    description: Second parallel wave that depends on wave_1a outputs.
+    launch_together:
+      - ws-sidebar-widgets (start from Signal Log only)
+      - ws-assistants (pilot flows only)
+    branch_examples:
+      - cursor/ws-sidebar-signal-log-47b4
+      - cursor/ws-assistants-pilot-47b4
+    merge_gate_for_scale_out:
+      - Sidebar Signal Log tool is usable end-to-end.
+      - Assistant pilot flows produce deterministic, test-backed outcomes.
+  scale_out_rule:
+    description: >
+      Only after wave_1b is stable, run many protocol/model slices in parallel.
+    allowed_parallel_tracks:
+      - Additional protocol+model slices using protocol_slice template.
+      - Additional transport adapters using transport_slice template.
+    required_controls:
+      - One small feature per PR.
+      - No cross-cutting refactors in protocol onboarding PRs.
+
+agent_prompt_packets:
+  usage_note: >
+    Copy one packet into an implementation agent. Keep scope narrow and do not
+    combine packets in one PR. All packets assume this roadmap is source of truth.
+  packet_pilot_protocol_lg_p12rk:
+    branch_name: cursor/ws-pilot-protocol-lg-p12rk-47b4
+    workstream_id: ws-pilot-protocol
+    objective: >
+      Implement first full vertical slice for one AC protocol and one model
+      (LG P12RK or closest existing bundled equivalent).
+    in_scope:
+      - Add protocol descriptor schema artifact for selected pilot protocol.
+      - Implement parser and generator for pilot protocol.
+      - Implement capability map (including optional features such as ionizer flag).
+      - Integrate capability-driven behavior for climate entity/widget path.
+      - Add unit tests for encode/decode/capability mapping roundtrip.
+    out_of_scope:
+      - Support for additional brands/protocols.
+      - Sidebar pages and assistant UX expansion.
+      - Transport refactor beyond required adapter usage.
+    concrete_files_hint:
+      - custom_components/easyir/protocols/*
+      - custom_components/easyir/climate.py
+      - custom_components/easyir/helpers.py
+      - tests/*
+    compatibility_constraints:
+      - Keep easyir.send_raw and easyir.send_profile_command contracts unchanged.
+      - Do not break existing profile path resolution behavior.
+    acceptance_criteria:
+      - Pilot model command generation works for covered actions.
+      - Incoming pilot payload can be decoded to normalized state delta.
+      - Tests pass and demonstrate deterministic mapping.
+  packet_room_log_sync_core:
+    branch_name: cursor/ws-room-log-sync-core-47b4
+    workstream_id: ws-room-log-sync
+    objective: >
+      Add normalized IR event logging and strict room-aware sync policy for inbound decoded signals.
+    in_scope:
+      - Add log storage model for inbound/outbound IR events.
+      - Add room visibility policy checks.
+      - Implement inbound decoded signal -> scoped entity state sync.
+      - Implement suggestion hook for unknown decoded device in visible room.
+      - Add tests for room filter allow/deny behavior.
+    out_of_scope:
+      - Full sidebar UI implementation.
+      - New protocol implementations beyond fixtures/mocks.
+    concrete_files_hint:
+      - custom_components/easyir/signal_log/*
+      - custom_components/easyir/__init__.py
+      - custom_components/easyir/config_flow.py
+      - tests/*
+    compatibility_constraints:
+      - No cross-room state updates.
+      - No behavior regression for existing send-only flows.
+    acceptance_criteria:
+      - Logged events are normalized and room-scoped.
+      - Sync applies only to eligible devices in room scope.
+      - Unknown decoded signals trigger add-device suggestion path only when allowed by room policy.
+  packet_legal_docs_alignment:
+    branch_name: cursor/ws-legal-governance-docs-47b4
+    workstream_id: ws-legal-governance
+    objective: Align legal docs with declared licensing and PR rights transfer policy.
+    in_scope:
+      - Update/create LICENSE statements for attribution and fork policy.
+      - Update/create CONTRIBUTING policy for PR rights transfer and third-party code warranty.
+      - Add PR template section requiring contributor confirmation checkbox.
+    out_of_scope:
+      - Runtime integration behavior changes.
+      - Refactors in Python runtime code.
+    concrete_files_hint:
+      - LICENSE
+      - CONTRIBUTING.md
+      - .github/PULL_REQUEST_TEMPLATE.md
+    compatibility_constraints:
+      - Docs-only PR.
+    acceptance_criteria:
+      - Policy text is explicit and internally consistent across legal docs.
+  packet_sidebar_signal_log:
+    branch_name: cursor/ws-sidebar-signal-log-47b4
+    workstream_id: ws-sidebar-widgets
+    objective: Deliver first EasyIR sidebar tool: Signal Log (backend-first, minimal UI surface).
+    depends_on:
+      - packet_pilot_protocol_lg_p12rk merged
+      - packet_room_log_sync_core merged
+    in_scope:
+      - Add backend API endpoints for reading room-scoped signal log.
+      - Add initial sidebar section and Signal Log tool entry.
+      - Add tests for API filtering and pagination basics.
+    out_of_scope:
+      - Transcoder page and assistants page.
+      - Broad dashboard redesign.
+    acceptance_criteria:
+      - Signal Log tool works for pilot scenario and respects room scope.
+  packet_assistants_pilot:
+    branch_name: cursor/ws-assistants-pilot-47b4
+    workstream_id: ws-assistants
+    objective: Deliver pilot assistant flows (with remote and without remote) on top of pilot protocol.
+    depends_on:
+      - packet_pilot_protocol_lg_p12rk merged
+      - packet_room_log_sync_core merged
+    in_scope:
+      - Remote capture -> decode -> infer capability flow for pilot protocol.
+      - Guided pairing (no remote) with candidate send + user feedback scoring.
+      - Deterministic confidence scoring and test fixtures.
+    out_of_scope:
+      - Multi-protocol universal inference.
+      - Sidebar polish beyond minimal API hooks.
+    acceptance_criteria:
+      - Both assistant flows complete for pilot with test-backed deterministic outcomes.
