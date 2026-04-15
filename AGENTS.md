@@ -216,9 +216,10 @@ These rules are mandatory for both directly started agents and agents started by
 ### 13.3 Roadmap status workflow
 
 1. Before launching any subagent for a task, orchestrator must change that task status in `docs/roadmap.multi-agent.yaml` to `В Работе`.
-2. This `В Работе` status change must be pushed to `dev` **without PR** so other orchestrators can see task lock state.
-3. Task status change to `Завершена` is done by the subagent inside its own task branch and included in task PR.
-4. Therefore, merging that PR to `dev` is the completion event for roadmap status.
+2. Orchestrator must commit and push this `В Работе` status change to `dev` **without PR** so other orchestrators can see task lock state.
+3. Launching any subagent is allowed only after this push to `dev` is successfully completed (no exceptions).
+4. Task status change to `Завершена` is done by the subagent inside its own task branch and included in task PR.
+5. Therefore, merging that PR to `dev` is the completion event for roadmap status.
 
 ### 13.4 Shared workspace safety in parallel runs
 
