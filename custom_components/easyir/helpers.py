@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -56,8 +57,8 @@ def _parse_raw(raw: Any) -> list[int]:
     return [int(x) for x in value]
 
 
-def _load_commands(path: str) -> dict[str, Any]:
-    """Load profile JSON payload with mtime-based caching."""
+def _load_profile_document(path: str) -> dict[str, Any]:
+    """Load full profile JSON with mtime-based caching (commands + metadata)."""
     file_path = Path(path)
     mtime_ns = file_path.stat().st_mtime_ns
 
@@ -66,9 +67,13 @@ def _load_commands(path: str) -> dict[str, Any]:
         return cached[1]
 
     data = json.loads(file_path.read_text(encoding="utf-8"))
-    commands = data["commands"]
-    _PROFILE_CACHE[path] = (mtime_ns, commands)
-    return commands
+    _PROFILE_CACHE[path] = (mtime_ns, data)
+    return data
+
+
+def _load_commands(path: str) -> dict[str, Any]:
+    """Return the `commands` subtree from a cached profile document."""
+    return _load_profile_document(path)["commands"]
 
 
 def clear_profile_cache() -> None:
@@ -90,7 +95,65 @@ def resolve_profile_raw(
     temperature: int | None = None,
 ) -> list[int]:
     """Resolve profile command to raw timing array."""
-    commands = _load_commands(path)
+    try:
+        from .protocols.lg_universal.engine import (
+            encode_lg_ac_frame_universal,
+            lg_ac_raw_timings_from_code,
+            profile_uses_lg_universal_encoder,
+        )
+    except ImportError:
+        repo_root = Path(__file__).resolve().parent.parent.parent
+        if str(repo_root) not in sys.path:
+            sys.path.insert(0, str(repo_root))
+        from custom_components.easyir.protocols.lg_universal.engine import (
+            encode_lg_ac_frame_universal,
+            lg_ac_raw_timings_from_code,
+            profile_uses_lg_universal_encoder,
+        )
+
+    doc = _load_profile_document(path)
+    if profile_uses_lg_universal_encoder(doc):
+        if action == "off":
+            code = encode_lg_ac_frame_universal(
+                power_on=False,
+                hvac_mode="off",
+                temperature_c=24,
+                fan_mode="auto",
+            )
+            return lg_ac_raw_timings_from_code(code)
+
+        if hvac_mode is None or fan_mode is None or temperature is None:
+            raise ValueError(
+                "For non-off actions, provide hvac_mode, fan_mode and temperature"
+            )
+        op_modes = {str(x).strip().lower() for x in (doc.get("operationModes") or [])}
+        fan_modes = {str(x).strip().lower() for x in (doc.get("fanModes") or [])}
+        mode_key = str(hvac_mode).strip().lower()
+        fan_key = _normalize_fan_key(str(fan_mode).strip().lower())
+        if op_modes and mode_key not in op_modes:
+            raise ValueError(
+                f"HVAC mode '{hvac_mode}' is not supported by this LG profile metadata"
+            )
+        if fan_modes and fan_key not in fan_modes:
+            raise ValueError(
+                f"Fan mode '{fan_mode}' is not supported by this LG profile metadata"
+            )
+        tmin = int(float(doc.get("minTemperature", 16)))
+        tmax = int(float(doc.get("maxTemperature", 32)))
+        temp_i = int(temperature)
+        if temp_i < tmin or temp_i > tmax:
+            raise ValueError(
+                f"Temperature {temp_i} out of profile range {tmin}..{tmax}"
+            )
+        code = encode_lg_ac_frame_universal(
+            power_on=True,
+            hvac_mode=mode_key,
+            temperature_c=temp_i,
+            fan_mode=fan_key,
+        )
+        return lg_ac_raw_timings_from_code(code)
+
+    commands = doc["commands"]
 
     if action == "off":
         return _parse_raw(commands["off"])

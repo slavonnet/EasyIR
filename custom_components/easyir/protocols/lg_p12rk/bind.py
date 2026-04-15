@@ -43,11 +43,16 @@ def climate_capability_view(path: str) -> dict[str, Any]:
     ion = (opt.get("ionizer") or {}) if isinstance(opt, dict) else {}
     ion_supported = bool(ion.get("supported")) if isinstance(ion, dict) else False
 
+    data = _read_profile_meta(path) or {}
+    profile_proto = str(data.get("easyir_protocol", "")).strip()
+    protocol_id = profile_proto or str(caps.get("model_id", "lg_p12rk"))
+
     return {
-        "protocol": caps.get("model_id", "lg_p12rk"),
+        "protocol": protocol_id,
         "pilot": True,
         "hvac_modes": list(caps.get("hvac_modes", [])),
         "fan_modes": list(caps.get("fan_modes", [])),
         "temperature_c": dict(caps.get("temperature_c", {})),
         "ionizer_supported": ion_supported,
+        "easyir_feature_flags": list(data.get("easyir_feature_flags") or []),
     }

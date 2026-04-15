@@ -257,7 +257,7 @@ initial_backlog:
     status: Завершена
   - id: core-codec-foundation
     content: Implement canonical IR model + codec registry + service compatibility adapter.
-    status: В Работе
+    status: Завершена
   - id: transport-abstraction
     content: Introduce transport interface, migrate TS1201 adapter, add supported hub discovery filters.
     status: pending
@@ -286,7 +286,7 @@ initial_backlog:
     content: >
       Implement universal LG bit-level encode/decode + feature-flag model and wire it into
       profile-driven send/decode flow with backward-compatible fallback.
-    status: В Работе
+    status: Завершена
 
 agent_task_templates:
   protocol_slice:
