@@ -21,6 +21,8 @@ sys.modules["easyir_helpers"] = _HELPERS
 _SPEC.loader.exec_module(_HELPERS)
 
 clear_profile_cache = _HELPERS.clear_profile_cache
+decode_broadlink_base64_to_raw = _HELPERS.decode_broadlink_base64_to_raw
+encode_raw_to_broadlink_base64 = _HELPERS.encode_raw_to_broadlink_base64
 encode_raw_to_tuya_base64 = _HELPERS.encode_raw_to_tuya_base64
 resolve_profile_raw = _HELPERS.resolve_profile_raw
 
@@ -51,6 +53,18 @@ class TestCanonicalModelAndCodec(unittest.TestCase):
         frame = codec.frame_from_timings(timings)
         code = reg.encode_for_transport("ts1201_zha", frame)
         self.assertEqual(code, encode_raw_to_tuya_base64(timings))
+
+    def test_default_registry_encodes_broadlink_transport(self) -> None:
+        reg = default_codec_registry()
+        codec = reg.get_codec("raw_timings")
+        timings = [8900, -4150, 500, -550, 500, -1580]
+        frame = codec.frame_from_timings(timings)
+        payload = reg.encode_for_transport("broadlink_base64", frame)
+        self.assertEqual(payload, encode_raw_to_broadlink_base64(timings))
+        decoded = decode_broadlink_base64_to_raw(payload)
+        self.assertEqual(len(decoded), len(timings))
+        for got, exp in zip(decoded, timings):
+            self.assertLessEqual(abs(got - exp), 80)
 
 
 class TestServiceAdapter(unittest.TestCase):

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from .model import CanonicalIRFrame
 from .registry import CodecRegistry, default_codec_registry
 
@@ -59,3 +61,28 @@ def encode_profile_command_for_zha_ts1201(
     )
     code = reg.encode_for_transport(_DEFAULT_TRANSPORT, frame)
     return frame, str(code)
+
+
+def transcode_ir_between_transports(
+    payload: Any,
+    *,
+    target_transport_id: str,
+    source_encoding: str | None = None,
+    registry: CodecRegistry | None = None,
+) -> tuple[CanonicalIRFrame, Any]:
+    """Decode arbitrary IR payload to canonical frame and encode for target transport."""
+    from ..helpers import decode_ir_payload
+
+    reg = registry or default_codec_registry()
+    decoded = decode_ir_payload(payload, encoding=source_encoding)
+    codec = reg.get_codec(_DEFAULT_CODEC)
+    frame = codec.frame_from_timings(
+        decoded.raw_timings,
+        protocol_hint="transcode",
+        integrity_metadata={
+            "source": "easyir.transcode",
+            "detected_encoding": decoded.source_encoding,
+        },
+    )
+    encoded = reg.encode_for_transport(target_transport_id, frame)
+    return frame, encoded

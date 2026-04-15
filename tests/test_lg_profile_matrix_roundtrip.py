@@ -1,30 +1,24 @@
-"""Audit test: LG profiles -> TS1201 base64 -> universal LG decode.
+"""Audit test: all LG profiles with auto-detected command encoding.
 
-Goal of this audit:
-- run over all bundled LG climate profiles,
-- parse profile raw commands,
-- encode to TS1201 base64 and decode back to raw timings,
-- try to parse first LG28 frame and decode with universal decoder,
-- classify outcomes:
-  1) exact HVAC match,
-  2) HVAC match but with extra bits (non-canonical frame),
-  3) decoded HVAC mismatch vs profile key tuple,
-  4) non-LG/other protocol frame,
-  5) non-HVAC LG command/flag frame,
-  6) invalid/unsupported profile payload.
+Pipeline per case:
+  profile payload (unknown vendor format)
+    -> decode_ir_payload_auto (canonical raw timings)
+    -> encode_raw_to_tuya_base64 (transport transcoding check)
+    -> decode_tuya_base64_to_raw (canonical raw timings again)
+    -> extract/decode LG28 state
+    -> classify + rank mismatches/extra bits.
 
-This audit intentionally does not require full parity for every legacy LG file.
-It provides a deterministic signal about where universal support is complete and
-where protocol variants/extra bits remain.
+The test validates the "any format -> canonical -> any format" direction and
+prints ranked diagnostics for protocol coverage planning.
 """
 
 from __future__ import annotations
 
-import base64
 import importlib.util
 import json
 import sys
 import unittest
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -42,6 +36,8 @@ sys.modules["easyir_helpers"] = _HELPERS
 _SPEC.loader.exec_module(_HELPERS)
 
 encode_raw_to_tuya_base64 = _HELPERS.encode_raw_to_tuya_base64
+decode_ir_payload_auto = _HELPERS.decode_ir_payload_auto
+decode_tuya_base64_to_raw = _HELPERS.decode_tuya_base64_to_raw
 
 CLIMATE_DIR = ROOT / "custom_components" / "easyir" / "profiles" / "climate"
 
@@ -55,6 +51,15 @@ class AuditSummary:
     non_lg_or_other_protocol: int = 0
     non_hvac_flag_frame: int = 0
     invalid_profile_payload: int = 0
+    detected_encodings: Counter[str] = field(default_factory=Counter)
+    declared_encodings: Counter[str] = field(default_factory=Counter)
+    state_mismatch_by_model: Counter[str] = field(default_factory=Counter)
+    state_mismatch_by_mode: Counter[str] = field(default_factory=Counter)
+    state_mismatch_by_profile: Counter[str] = field(default_factory=Counter)
+    extra_bits_by_command_pair: Counter[str] = field(default_factory=Counter)
+    extra_bits_by_diff_mask: Counter[str] = field(default_factory=Counter)
+    extra_bits_by_position: Counter[int] = field(default_factory=Counter)
+    extra_bits_domain: Counter[str] = field(default_factory=Counter)
     samples: dict[str, list[str]] = field(
         default_factory=lambda: {
             "exact_match": [],
@@ -81,7 +86,38 @@ class AuditSummary:
             + self.invalid_profile_payload
         )
 
+    @staticmethod
+    def _top(counter: Counter[Any], limit: int = 10) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        for key, count in counter.most_common(limit):
+            rows.append({"key": key, "count": count})
+        return rows
+
+    @staticmethod
+    def _bit_domain(bit: int) -> str:
+        if 4 <= bit <= 7:
+            return "fan_bits"
+        if 8 <= bit <= 11:
+            return "temperature_bits"
+        if 12 <= bit <= 14:
+            return "mode_bits"
+        if 15 <= bit <= 19:
+            return "command_word_high_bits"
+        if 20 <= bit <= 27:
+            return "signature_or_control_bits"
+        return "checksum_or_low_control_bits"
+
     def as_dict(self) -> dict[str, Any]:
+        ranked_bits: list[dict[str, Any]] = []
+        for bit, count in self.extra_bits_by_position.most_common(10):
+            ranked_bits.append(
+                {
+                    "bit": int(bit),
+                    "mask": f"0x{(1 << int(bit)):07X}",
+                    "count": count,
+                    "domain": self._bit_domain(int(bit)),
+                }
+            )
         return {
             "total_cases": self.total_cases,
             "exact_match": self.exact_match,
@@ -90,44 +126,23 @@ class AuditSummary:
             "non_lg_or_other_protocol": self.non_lg_or_other_protocol,
             "non_hvac_flag_frame": self.non_hvac_flag_frame,
             "invalid_profile_payload": self.invalid_profile_payload,
+            "detected_encodings": dict(self.detected_encodings),
+            "declared_encodings": dict(self.declared_encodings),
+            "ranked": {
+                "top_state_mismatch_models": self._top(self.state_mismatch_by_model, 10),
+                "top_state_mismatch_modes": self._top(self.state_mismatch_by_mode, 10),
+                "top_state_mismatch_profiles": self._top(
+                    self.state_mismatch_by_profile, 10
+                ),
+                "top_extra_command_word_pairs": self._top(
+                    self.extra_bits_by_command_pair, 10
+                ),
+                "top_extra_diff_masks": self._top(self.extra_bits_by_diff_mask, 10),
+                "top_extra_bits": ranked_bits,
+                "priority_feature_groups": self._top(self.extra_bits_domain, 10),
+            },
             "samples": self.samples,
         }
-
-
-def _parse_profile_raw(raw: Any) -> list[int]:
-    if isinstance(raw, (list, tuple)):
-        return [int(x) for x in raw]
-    if not isinstance(raw, str):
-        raise ValueError(f"Unsupported raw payload type: {type(raw).__name__}")
-    value = json.loads(raw)
-    if not isinstance(value, list):
-        raise ValueError("Profile raw payload must decode to list")
-    return [int(x) for x in value]
-
-
-def _decode_tuya_base64_to_raw(payload: str) -> list[int]:
-    """Invert TS1201 chunked base64 payload to alternating mark/space timings."""
-    data = base64.b64decode(payload.encode())
-    pos = 0
-    bytes_flat: list[int] = []
-    while pos < len(data):
-        chunk_len = data[pos] + 1
-        pos += 1
-        chunk = data[pos : pos + chunk_len]
-        pos += chunk_len
-        bytes_flat.extend(chunk)
-
-    u16: list[int] = []
-    for i in range(0, len(bytes_flat), 2):
-        if i + 1 >= len(bytes_flat):
-            break
-        v = bytes_flat[i] | (bytes_flat[i + 1] << 8)
-        u16.append(v)
-
-    timings: list[int] = []
-    for i, val in enumerate(u16):
-        timings.append(val if i % 2 == 0 else -val)
-    return timings
 
 
 def _extract_first_lg28_code(raw: list[int]) -> int | None:
@@ -221,9 +236,14 @@ class TestLgProfileMatrixRoundtrip(unittest.TestCase):
 
         for path in lg_profiles:
             doc = json.loads(path.read_text(encoding="utf-8"))
+            declared_encoding = str(doc.get("commandsEncoding", "unknown")).strip().lower()
+            summary.declared_encodings[declared_encoding] += 1
             commands = doc.get("commands") or {}
             if not isinstance(commands, dict):
                 continue
+            models = [str(m) for m in (doc.get("supportedModels") or [])]
+            if not models:
+                models = ["<unknown_model>"]
 
             for action, fan_tree in commands.items():
                 action_norm = _normalize_mode(str(action))
@@ -241,9 +261,11 @@ class TestLgProfileMatrixRoundtrip(unittest.TestCase):
                         summary.total_cases += 1
                         try:
                             expected_temp = float(int(str(temp_key)))
-                            raw = _parse_profile_raw(raw_payload)
+                            decoded_payload = decode_ir_payload_auto(raw_payload)
+                            summary.detected_encodings[decoded_payload.source_encoding] += 1
+                            raw = decoded_payload.raw_timings
                             b64 = encode_raw_to_tuya_base64(raw)
-                            raw_roundtrip = _decode_tuya_base64_to_raw(b64)
+                            raw_roundtrip = decode_tuya_base64_to_raw(b64)
                             code = _extract_first_lg28_code(raw_roundtrip)
                         except Exception as err:
                             summary.add(
@@ -293,6 +315,10 @@ class TestLgProfileMatrixRoundtrip(unittest.TestCase):
                                     f"->decoded({result.hvac_mode},{result.fan_mode},{result.temperature_c})"
                                 ),
                             )
+                            for model in models:
+                                summary.state_mismatch_by_model[model] += 1
+                            summary.state_mismatch_by_mode[f"{action_norm}:{fan_norm}"] += 1
+                            summary.state_mismatch_by_profile[path.name] += 1
                             continue
 
                         canonical = encode_lg_ac_frame_universal(
@@ -307,6 +333,19 @@ class TestLgProfileMatrixRoundtrip(unittest.TestCase):
                                 f"{path.name}:{action_norm}:{fan_norm}:{temp_key}",
                             )
                         else:
+                            diff_mask = (code ^ canonical) & 0x0FFFFFFF
+                            cmd_code = (code >> 4) & 0xFFFF
+                            cmd_canonical = (canonical >> 4) & 0xFFFF
+                            summary.extra_bits_by_command_pair[
+                                f"0x{cmd_code:04X}->0x{cmd_canonical:04X}"
+                            ] += 1
+                            summary.extra_bits_by_diff_mask[f"0x{diff_mask:07X}"] += 1
+                            for bit in range(28):
+                                if (diff_mask >> bit) & 0x1:
+                                    summary.extra_bits_by_position[bit] += 1
+                                    summary.extra_bits_domain[
+                                        AuditSummary._bit_domain(bit)
+                                    ] += 1
                             summary.add(
                                 "match_with_extra_bits",
                                 (
