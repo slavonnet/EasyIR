@@ -87,6 +87,14 @@ def _normalize_fan_key(fan_mode: str) -> str:
     return aliases.get(fan_mode, fan_mode)
 
 
+def _normalize_hvac_action(action: str, hvac_mode: str | None) -> str:
+    """Prefer explicit hvac_mode to avoid action/hvac mismatch in profile lookup."""
+    hvac = str(hvac_mode).strip().lower() if hvac_mode is not None else ""
+    if hvac in {"cool", "dry", "fan_only", "auto", "heat"}:
+        return hvac
+    return str(action).strip().lower()
+
+
 def resolve_profile_raw(
     path: str,
     action: str,
@@ -97,6 +105,17 @@ def resolve_profile_raw(
     """Resolve profile command to raw timing array."""
     try:
         from .protocols.lg_universal.engine import (
+            LG_CMD_AUTO_CLEAN_OFF,
+            LG_CMD_AUTO_CLEAN_ON,
+            LG_CMD_ENERGY_SAVING_OFF,
+            LG_CMD_ENERGY_SAVING_ON,
+            LG_CMD_JET_ON,
+            LG_CMD_LIGHT,
+            LG_CMD_SWING_OFF,
+            LG_CMD_SWING_ON,
+            LG_CMD_WALL_SWING_OFF,
+            LG_CMD_WALL_SWING_ON,
+            encode_lg_command16,
             encode_lg_ac_frame_universal,
             lg_ac_raw_timings_from_code,
             profile_uses_lg_universal_encoder,
@@ -106,6 +125,17 @@ def resolve_profile_raw(
         if str(repo_root) not in sys.path:
             sys.path.insert(0, str(repo_root))
         from custom_components.easyir.protocols.lg_universal.engine import (
+            LG_CMD_AUTO_CLEAN_OFF,
+            LG_CMD_AUTO_CLEAN_ON,
+            LG_CMD_ENERGY_SAVING_OFF,
+            LG_CMD_ENERGY_SAVING_ON,
+            LG_CMD_JET_ON,
+            LG_CMD_LIGHT,
+            LG_CMD_SWING_OFF,
+            LG_CMD_SWING_ON,
+            LG_CMD_WALL_SWING_OFF,
+            LG_CMD_WALL_SWING_ON,
+            encode_lg_command16,
             encode_lg_ac_frame_universal,
             lg_ac_raw_timings_from_code,
             profile_uses_lg_universal_encoder,
@@ -113,7 +143,36 @@ def resolve_profile_raw(
 
     doc = _load_profile_document(path)
     if profile_uses_lg_universal_encoder(doc):
-        if action == "off":
+        normalized_action = str(action).strip().lower()
+        special_actions: dict[str, tuple[int, str]] = {
+            "energy_saving_on": (LG_CMD_ENERGY_SAVING_ON, "energy_saving"),
+            "energy_saving_off": (LG_CMD_ENERGY_SAVING_OFF, "energy_saving"),
+            "jet_on": (LG_CMD_JET_ON, "jet"),
+            "wall_swing_on": (LG_CMD_WALL_SWING_ON, "wall_swing"),
+            "wall_swing_off": (LG_CMD_WALL_SWING_OFF, "wall_swing"),
+            "swing_on": (LG_CMD_SWING_ON, "swing"),
+            "swing_off": (LG_CMD_SWING_OFF, "swing"),
+            "auto_clean_on": (LG_CMD_AUTO_CLEAN_ON, "auto_clean"),
+            "auto_clean_off": (LG_CMD_AUTO_CLEAN_OFF, "auto_clean"),
+            "light": (LG_CMD_LIGHT, "light"),
+        }
+
+        if normalized_action in special_actions:
+            profile_flags = {
+                str(x).strip().lower() for x in (doc.get("easyir_feature_flags") or [])
+            }
+            command16, required_flag = special_actions[normalized_action]
+            if required_flag not in profile_flags:
+                raise ValueError(
+                    f"Action '{action}' requires profile feature flag '{required_flag}'"
+                )
+            return lg_ac_raw_timings_from_code(encode_lg_command16(command16))
+
+        if normalized_action not in ("off", "cool", "dry", "heat", "fan_only", "auto"):
+            raise ValueError(
+                f"Action '{action}' is not supported by LG universal encoder in MVP send path"
+            )
+        if normalized_action == "off":
             code = encode_lg_ac_frame_universal(
                 power_on=False,
                 hvac_mode="off",
@@ -155,21 +214,27 @@ def resolve_profile_raw(
 
     commands = doc["commands"]
 
-    if action == "off":
+    action_key = str(action).strip().lower()
+    if action_key == "off":
         return _parse_raw(commands["off"])
 
-    if action not in commands:
-        raise ValueError(f"Action '{action}' not found in profile commands")
     if hvac_mode is None or fan_mode is None or temperature is None:
         raise ValueError(
             "For non-off actions, provide hvac_mode, fan_mode and temperature"
         )
 
-    fan_key = _normalize_fan_key(fan_mode)
-    if fan_key not in commands[action]:
+    profile_action = _normalize_hvac_action(action_key, hvac_mode)
+    if profile_action not in commands:
         raise ValueError(
-            f"Fan mode '{fan_mode}' not found under action '{action}' "
+            f"Action '{profile_action}' not found in profile commands "
+            f"(requested action='{action}', hvac_mode='{hvac_mode}')"
+        )
+
+    fan_key = _normalize_fan_key(fan_mode)
+    if fan_key not in commands[profile_action]:
+        raise ValueError(
+            f"Fan mode '{fan_mode}' not found under action '{profile_action}' "
             f"(tried '{fan_key}')"
         )
-    raw = commands[action][fan_key][str(temperature)]
+    raw = commands[profile_action][fan_key][str(temperature)]
     return _parse_raw(raw)
