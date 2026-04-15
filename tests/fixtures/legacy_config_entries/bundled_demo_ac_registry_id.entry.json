@@ -1,0 +1,8 @@
+{
+  "_description": "Config entry data when user picked registry id demo_ac (path resolved at setup to bundled demo_ac.json).",
+  "data": {
+    "ieee": "00:12:4b:00:1c:a8:ab:cd",
+    "profile_path": "${EASYIR_REPO_ROOT}/custom_components/easyir/profiles/demo_ac.json",
+    "endpoint_id": 1
+  }
+}

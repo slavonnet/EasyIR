@@ -26,8 +26,16 @@ sys.modules["easyir_helpers"] = _HELPERS_MODULE
 _SPEC.loader.exec_module(_HELPERS_MODULE)
 
 clear_profile_cache = _HELPERS_MODULE.clear_profile_cache
+decode_ir_payload = _HELPERS_MODULE.decode_ir_payload
+decode_ir_payload_auto = _HELPERS_MODULE.decode_ir_payload_auto
+decode_tuya_base64_to_raw = _HELPERS_MODULE.decode_tuya_base64_to_raw
+decode_tuya_learn_base64_to_raw = _HELPERS_MODULE.decode_tuya_learn_base64_to_raw
+decode_broadlink_base64_to_raw = _HELPERS_MODULE.decode_broadlink_base64_to_raw
 encode_raw_to_tuya_base64 = _HELPERS_MODULE.encode_raw_to_tuya_base64
+encode_raw_to_tuya_learn_base64 = _HELPERS_MODULE.encode_raw_to_tuya_learn_base64
+encode_raw_to_broadlink_base64 = _HELPERS_MODULE.encode_raw_to_broadlink_base64
 resolve_profile_raw = _HELPERS_MODULE.resolve_profile_raw
+transcode_ir_payload = _HELPERS_MODULE.transcode_ir_payload
 
 
 class TestEncodeRawToTuyaBase64(unittest.TestCase):
@@ -191,6 +199,128 @@ class TestResolveProfileRaw(unittest.TestCase):
 
         self.assertEqual(first, [10, -20, 30])
         self.assertEqual(second, [40, -50, 60])
+
+
+class TestIrPayloadDecodeAndTranscode(unittest.TestCase):
+    def test_decode_tuya_roundtrip(self) -> None:
+        raw = [9000, -4500, 560, -560, 560, -1690]
+        payload = encode_raw_to_tuya_base64(raw)
+        decoded = decode_ir_payload(payload, encoding="tuya")
+        self.assertEqual(decoded.source_encoding, "tuya_base64")
+        self.assertEqual(decoded.raw_timings, raw)
+        self.assertEqual(decode_tuya_base64_to_raw(payload), raw)
+
+    def test_decode_broadlink_roundtrip(self) -> None:
+        raw = [9024, -4512, 564, -564, 564, -1688]
+        payload = encode_raw_to_broadlink_base64(raw)
+        decoded = decode_ir_payload(payload, encoding="base64")
+        self.assertEqual(decoded.source_encoding, "broadlink_base64")
+        recovered = decoded.raw_timings
+        self.assertEqual(len(recovered), len(raw))
+        for got, exp in zip(recovered, raw):
+            # Broadlink is unit-quantized, microseconds are approximate.
+            self.assertLessEqual(abs(got - exp), 80)
+        self.assertEqual(recovered, decode_broadlink_base64_to_raw(payload))
+
+    def test_decode_tuya_learn_roundtrip(self) -> None:
+        raw = [8956, -4138, 520, -1576, 520, -520, 520, -520]
+        payload = encode_raw_to_tuya_learn_base64(raw)
+        decoded = decode_ir_payload(payload, encoding="tuya_learn")
+        self.assertEqual(decoded.source_encoding, "tuya_learn_base64")
+        self.assertEqual(decoded.raw_timings, raw)
+        self.assertEqual(decode_tuya_learn_base64_to_raw(payload), raw)
+
+    def test_decode_auto_detects_raw_json(self) -> None:
+        payload = "[1000, -2000, 500]"
+        decoded = decode_ir_payload_auto(payload)
+        self.assertEqual(decoded.source_encoding, "raw")
+        self.assertEqual(decoded.raw_timings, [1000, -2000, 500])
+
+    def test_decode_auto_detects_tuya_base64(self) -> None:
+        raw = [1000, -2000, 500, -600]
+        payload = encode_raw_to_tuya_base64(raw)
+        decoded = decode_ir_payload_auto(payload)
+        self.assertEqual(decoded.source_encoding, "tuya_base64")
+        self.assertEqual(decoded.raw_timings, raw)
+
+    def test_decode_auto_detects_tuya_learn_base64(self) -> None:
+        # Pick a pattern that does not also decode as TS1201 chunked payload.
+        raw = [3210, -1600, 500, -500, 500, -1600, 500, -500, 500, -500, 500, -500]
+        payload = encode_raw_to_tuya_learn_base64(raw)
+        decoded = decode_ir_payload_auto(payload)
+        # Some literal-only FastLZ streams are byte-compatible with TS1201 chunks.
+        # In that ambiguous case auto-detector can legitimately report tuya_base64.
+        self.assertIn(decoded.source_encoding, {"tuya_learn_base64", "tuya_base64"})
+        self.assertEqual(decoded.raw_timings, raw)
+
+    def test_decode_auto_detects_broadlink_base64(self) -> None:
+        raw = [8890, -4175, 500, -550, 500, -1580]
+        payload = encode_raw_to_broadlink_base64(raw)
+        decoded = decode_ir_payload_auto(payload)
+        self.assertEqual(decoded.source_encoding, "broadlink_base64")
+        self.assertEqual(len(decoded.raw_timings), len(raw))
+
+    def test_transcode_between_vendor_formats_via_raw(self) -> None:
+        raw = [8900, -4150, 500, -550, 500, -1580]
+        broadlink_payload = transcode_ir_payload(raw, target_encoding="broadlink")
+        self.assertIsInstance(broadlink_payload, str)
+        tuya_payload = transcode_ir_payload(
+            broadlink_payload,
+            source_encoding="auto",
+            target_encoding="tuya",
+        )
+        self.assertIsInstance(tuya_payload, str)
+        decoded = decode_tuya_base64_to_raw(str(tuya_payload))
+        self.assertEqual(len(decoded), len(raw))
+
+    def test_transcode_tuya_learn_to_tuya_payload(self) -> None:
+        raw = [8900, -4150, 500, -550, 500, -1580]
+        learn_payload = transcode_ir_payload(raw, target_encoding="tuya_learn")
+        self.assertIsInstance(learn_payload, str)
+        tuya_payload = transcode_ir_payload(
+            learn_payload,
+            source_encoding="tuya_learn",
+            target_encoding="tuya",
+        )
+        self.assertIsInstance(tuya_payload, str)
+        decoded = decode_tuya_base64_to_raw(str(tuya_payload))
+        self.assertEqual(decoded, raw)
+
+    def test_decode_user_tuya_learn_samples(self) -> None:
+        # Real samples reported by user (Tuya learn strings from AC remote).
+        cool_on = "CfwiKhAIAigGCALgAwHgBw/gHwFAN0AD4A8BBygGCAIoBggC"
+        power_off = "Cc0iPhAJAh4GCQLgAwHgCw/gBxPgFwHAL8AHCwkCCQIJAgkCHgYJAg=="
+        cool_decoded = decode_ir_payload_auto(cool_on)
+        off_decoded = decode_ir_payload_auto(power_off)
+        self.assertEqual(cool_decoded.source_encoding, "tuya_learn_base64")
+        self.assertEqual(off_decoded.source_encoding, "tuya_learn_base64")
+        self.assertGreater(len(cool_decoded.raw_timings), 50)
+        self.assertGreater(len(off_decoded.raw_timings), 50)
+
+    def test_resolve_profile_raw_supports_base64_commands_encoding(self) -> None:
+        raw = [8890, -4175, 500, -550, 500, -1580]
+        payload = {
+            "commandsEncoding": "Base64",
+            "commands": {"off": encode_raw_to_broadlink_base64(raw)},
+        }
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "profile.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            resolved = resolve_profile_raw(path=str(path), action="off")
+        self.assertEqual(len(resolved), len(raw))
+        for got, exp in zip(resolved, raw):
+            self.assertLessEqual(abs(got - exp), 80)
+
+    def test_resolve_profile_raw_falls_back_to_auto_when_hint_invalid(self) -> None:
+        payload = {
+            "commandsEncoding": "Tuya",  # wrong hint for this JSON raw payload
+            "commands": {"off": "[1, -2, 3, -4]"},
+        }
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "profile.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            resolved = resolve_profile_raw(path=str(path), action="off")
+        self.assertEqual(resolved, [1, -2, 3, -4])
 
 
 if __name__ == "__main__":

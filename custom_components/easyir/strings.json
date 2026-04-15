@@ -11,7 +11,7 @@
     "step": {
       "user": {
         "title": "EasyIR",
-        "description": "Pick your ZHA IR device and a built-in profile (codes ship with EasyIR). Custom path is optional.",
+        "description": "Pick your ZHA IR device (picker prefers TS1201 models). Built-in profiles ship with EasyIR; custom path is optional.%optional_supported",
         "data": {
           "zha_device": "ZHA device",
           "profile_choice": "IR profile",

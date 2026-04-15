@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "model_id": "lg_p12rk",
+  "profile_hints": {
+    "manufacturer": "LG",
+    "supported_models_contains": ["P12RK"]
+  },
+  "hvac_modes": ["off", "cool", "dry"],
+  "fan_modes": ["auto", "low", "mid", "high"],
+  "temperature_c": {"min": 18, "max": 30, "step": 1},
+  "optional_features": {
+    "ionizer": {
+      "supported": true,
+      "protocol_field": "command16",
+      "note": "LG universal command words (ac_LG.h); gated per profile via easyir_feature_flags"
+    },
+    "energy_saving": {
+      "supported": true,
+      "protocol_field": "command16",
+      "note": "LG universal energy-saving toggle pair"
+    },
+    "auto_clean": {
+      "supported": true,
+      "protocol_field": "command16",
+      "note": "LG universal auto-clean toggle pair"
+    }
+  }
+}

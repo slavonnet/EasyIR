@@ -1,0 +1,8 @@
+{
+  "_description": "Config entry data with resolved absolute path to a climate library profile (LG 7062.json).",
+  "data": {
+    "ieee": "8c:65:a3:ff:fe:92:63:ce",
+    "profile_path": "${EASYIR_REPO_ROOT}/custom_components/easyir/profiles/climate/7062.json",
+    "endpoint_id": 1
+  }
+}
