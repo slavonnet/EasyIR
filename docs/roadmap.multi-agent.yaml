@@ -286,7 +286,7 @@ initial_backlog:
     content: >
       Implement universal LG bit-level encode/decode + feature-flag model and wire it into
       profile-driven send/decode flow with backward-compatible fallback.
-    status: В Работе
+    status: Завершена
 
 agent_task_templates:
   protocol_slice:

@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "protocol_id": "lg_universal_v1",
+  "display_name": "LG AC universal bit engine (28-bit frame)",
+  "wire_description": "28-bit little-endian nibble layout per IRremoteESP8266 IRLgAc / LGProtocol; logical constants cross-checked with Arduino-IRremote ac_LG.h",
+  "references": [
+    "https://raw.githubusercontent.com/Arduino-IRremote/Arduino-IRremote/refs/heads/master/src/ac_LG.h",
+    "https://raw.githubusercontent.com/Arduino-IRremote/Arduino-IRremote/refs/heads/master/src/ac_LG.hpp",
+    "https://github.com/crankyoldgit/IRremoteESP8266/blob/master/src/ir_LG.h"
+  ],
+  "bit_layout": {
+    "signature": { "bits": 8, "shift": 20, "expected": "0x88" },
+    "power": { "bits": 2, "shift": 18 },
+    "mode": { "bits": 3, "shift": 12 },
+    "temp_raw": { "bits": 4, "shift": 8, "temp_offset_c": 15 },
+    "fan": { "bits": 4, "shift": 4 },
+    "checksum_nibble": { "bits": 4, "shift": 0, "rule": "sum_low_16_nibbles_mod16" }
+  }
+}

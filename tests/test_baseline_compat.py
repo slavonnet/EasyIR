@@ -68,9 +68,9 @@ class TestLegacyConfigEntryRegression(unittest.TestCase):
     _EXPECTED_OFF_BASE64 = {
         "bundled_demo_ac_registry_id.entry": "BegD0Af0AQ==",
         "bundled_climate_7062.entry": (
-            "H34MTibnAREGQwIGAgYC5wEkAucBJALUBWEC5wEkAucBHyQC5wEkAtQFQwLUBUMCyQFDAucBJALn"
-            "ASQCBgIGAgYCHwYC5wEkAucBJALnASQCyQFDAskBQwLnASQC1AVDAskBF0MC1AUkAgYCJALnASQC"
-            "5wEkAvMFJAL//w=="
+            "H8QiNhD0ASwG9AEmAvQBJgL0ASYC9AEsBvQBJgL0ASYCH/QBJgL0ASwG9AEsBvQBJgL0ASYC9AEm"
+            "AvQBJgL0ASYCH/QBJgL0ASYC9AEmAvQBJgL0ASYC9AEmAvQBLAb0ASYCFfQBLAb0ASYC9AEmAvQBJgL0"
+            "ASwG//8="
         ),
         "custom_absolute_path.entry": "BegD0Af0AQ==",
     }
