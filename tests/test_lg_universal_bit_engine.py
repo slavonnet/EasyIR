@@ -17,6 +17,7 @@ from protocols.lg_universal.engine import (
     LgDecodeResult,
     decode_lg_ac_strict,
     encode_lg_ac_frame_universal,
+    encode_lg_command16,
     lg_ac_raw_timings_from_code,
     load_lg_universal_descriptor,
     profile_uses_lg_universal_encoder,
@@ -107,6 +108,29 @@ class TestLgUniversalEngine(unittest.TestCase):
         self.assertEqual(r.temperature_c, 26.0)
         self.assertEqual(r.fan_mode, "high")
 
+    def test_strict_decode_exposes_known_flag_command_words(self) -> None:
+        # 0x1004 = LG_ENERGY_SAVING_ON in Arduino-IRremote ac_LG.h.
+        code = encode_lg_command16(0x1004)
+        r = decode_lg_ac_strict(code)
+        self.assertTrue(r.ok)
+        self.assertIsNone(r.error)
+        self.assertIn("energy_saving", r.feature_flags)
+        self.assertTrue(r.feature_flags["energy_saving"])
+
+    def test_strict_decode_rejects_state_with_unsupported_mode(self) -> None:
+        # Build valid checksum frame with unknown mode value (5) and ensure strict state rejection.
+        code = 0x88 << 20
+        code |= 0 << 18  # power on
+        code |= 5 << 12  # unsupported mode id
+        code |= (24 - 15) << 8
+        code |= 5 << 4  # fan auto
+        command16 = (code >> 4) & 0xFFFF
+        checksum = sum((command16 >> shift) & 0xF for shift in (0, 4, 8, 12)) & 0xF
+        code = (code & 0xFFFFFFF0) | checksum
+        r = decode_lg_ac_strict(code)
+        self.assertFalse(r.ok)
+        self.assertEqual(r.error, "unsupported_hvac_state")
+
 
 class TestResolveProfileAdapter(unittest.TestCase):
     def setUp(self) -> None:
@@ -184,6 +208,77 @@ class TestResolveProfileAdapter(unittest.TestCase):
                     path=str(path),
                     action="cool",
                     hvac_mode="dry",
+                    fan_mode="auto",
+                    temperature=24,
+                )
+
+    def test_universal_rejects_unknown_action_for_lg28(self) -> None:
+        payload = {
+            "operationModes": ["cool"],
+            "fanModes": ["auto"],
+            "easyir_protocol": "lg_universal_v1",
+            "easyir_encoding": "lg28",
+            "commands": {"off": "[1,-2]", "cool": {"auto": {"24": "[3,-4,5]"}}},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "x.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "not supported by LG universal encoder"):
+                resolve_profile_raw(
+                    path=str(path),
+                    action="swing",
+                    hvac_mode="cool",
+                    fan_mode="auto",
+                    temperature=24,
+                )
+
+    def test_universal_supports_energy_toggle_action(self) -> None:
+        payload = {
+            "operationModes": ["cool"],
+            "fanModes": ["auto"],
+            "easyir_protocol": "lg_universal_v1",
+            "easyir_encoding": "lg28",
+            "easyir_feature_flags": ["energy_saving"],
+            "commands": {"off": "[1,-2]"},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "x.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            on_raw = resolve_profile_raw(
+                path=str(path),
+                action="energy_saving_on",
+                hvac_mode="cool",
+                fan_mode="auto",
+                temperature=24,
+            )
+            off_raw = resolve_profile_raw(
+                path=str(path),
+                action="energy_saving_off",
+                hvac_mode="cool",
+                fan_mode="auto",
+                temperature=24,
+            )
+            self.assertEqual(len(on_raw), 59)
+            self.assertEqual(len(off_raw), 59)
+            self.assertNotEqual(on_raw, off_raw)
+
+    def test_universal_blocks_flag_action_without_profile_flag(self) -> None:
+        payload = {
+            "operationModes": ["cool"],
+            "fanModes": ["auto"],
+            "easyir_protocol": "lg_universal_v1",
+            "easyir_encoding": "lg28",
+            "easyir_feature_flags": ["mode_temp_fan", "power_off"],
+            "commands": {"off": "[1,-2]"},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "x.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "feature flag"):
+                resolve_profile_raw(
+                    path=str(path),
+                    action="energy_saving_on",
+                    hvac_mode="cool",
                     fan_mode="auto",
                     temperature=24,
                 )
