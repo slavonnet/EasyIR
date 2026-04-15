@@ -97,6 +97,8 @@ class EasyIrClimate(ClimateEntity):
             "easyir_protocol": view.get("protocol"),
             "easyir_pilot": True,
             "easyir_ionizer_supported": bool(view.get("ionizer_supported")),
+            "easyir_energy_saving_supported": bool(view.get("energy_saving_supported")),
+            "easyir_auto_clean_supported": bool(view.get("auto_clean_supported")),
         }
 
     async def async_added_to_hass(self) -> None:
@@ -127,6 +129,16 @@ class EasyIrClimate(ClimateEntity):
                 self._attr_target_temperature = float(temp)
             except (TypeError, ValueError):
                 pass
+        ff = decoded.get("feature_flags")
+        if isinstance(ff, dict) and self._cap_view.get("pilot"):
+            attrs = dict(self._attr_extra_state_attributes or {})
+            if self._cap_view.get("ionizer_supported") and "ionizer" in ff:
+                attrs["easyir_ionizer_on"] = bool(ff["ionizer"])
+            if self._cap_view.get("energy_saving_supported") and "energy_saving" in ff:
+                attrs["easyir_energy_saving_on"] = bool(ff["energy_saving"])
+            if self._cap_view.get("auto_clean_supported") and "auto_clean" in ff:
+                attrs["easyir_auto_clean_on"] = bool(ff["auto_clean"])
+            self._attr_extra_state_attributes = attrs
         self.async_write_ha_state()
 
     async def _send(self, data: dict[str, Any]) -> None:

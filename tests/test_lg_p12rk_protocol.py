@@ -75,7 +75,7 @@ class TestLgAcFrame(unittest.TestCase):
         c = load_lg_p12rk_capabilities()
         ion = (c.get("optional_features") or {}).get("ionizer") or {}
         self.assertIn("supported", ion)
-        self.assertFalse(ion.get("supported"))
+        self.assertTrue(ion.get("supported"))
 
 
 class TestCapabilityBinding(unittest.TestCase):
@@ -93,7 +93,26 @@ class TestCapabilityBinding(unittest.TestCase):
             self.assertTrue(view["pilot"])
             self.assertEqual(view["protocol"], "lg_p12rk")
             self.assertIn("cool", view["hvac_modes"])
-            self.assertFalse(view["ionizer_supported"])
+            self.assertTrue(view["ionizer_supported"])
+            self.assertTrue(view.get("energy_saving_supported"))
+            self.assertTrue(view.get("auto_clean_supported"))
+
+    def test_p12rk_profile_protocol_and_flags_gate_capabilities(self) -> None:
+        payload = {
+            "manufacturer": "LG",
+            "supportedModels": ["P12RK"],
+            "easyir_protocol": "lg_universal_v1",
+            "easyir_feature_flags": ["mode_temp_fan", "power_off", "ionizer"],
+            "commands": {"off": "[1,-2,3]"},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "p.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            view = climate_capability_view(str(path))
+            self.assertEqual(view["protocol"], "lg_universal_v1")
+            self.assertTrue(view["ionizer_supported"])
+            self.assertFalse(view.get("energy_saving_supported"))
+            self.assertFalse(view.get("auto_clean_supported"))
 
     def test_non_pilot_profile(self) -> None:
         payload = {"manufacturer": "Other", "supportedModels": ["X"]}
