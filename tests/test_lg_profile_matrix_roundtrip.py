@@ -94,11 +94,45 @@ class AuditSummary:
         }
 
 
-def _parse_profile_raw(raw: Any) -> list[int]:
+def _parse_broadlink_base64_to_raw(payload: str) -> list[int]:
+    """Decode Broadlink IR packet (base64) into alternating mark/space timings.
+
+    SmartIR profiles with `commandsEncoding: Base64` store Broadlink packets
+    (token 0x26). Durations are encoded in Broadlink ticks (~32.84us).
+    """
+    data = base64.b64decode(payload.encode())
+    if not data or data[0] != 0x26:
+        raise ValueError("Unsupported Broadlink payload header")
+
+    # Broadlink packet length is little-endian at bytes 2..3 (payload body).
+    end = min((data[3] << 8) + data[2] + 4, len(data))
+    idx = 4
+    durations_us: list[int] = []
+    while idx < end:
+        chunk = data[idx]
+        idx += 1
+        if chunk == 0:
+            if idx + 1 >= end:
+                break
+            chunk = (data[idx] << 8) + data[idx + 1]
+            idx += 2
+        # Broadlink unit conversion: usec ~= chunk * 8192 / 269.
+        durations_us.append(int(round(chunk * 8192 / 269)))
+
+    timings: list[int] = []
+    for i, val in enumerate(durations_us):
+        timings.append(val if i % 2 == 0 else -val)
+    return timings
+
+
+def _parse_profile_raw(raw: Any, *, commands_encoding: str) -> list[int]:
     if isinstance(raw, (list, tuple)):
         return [int(x) for x in raw]
     if not isinstance(raw, str):
         raise ValueError(f"Unsupported raw payload type: {type(raw).__name__}")
+    enc = commands_encoding.strip().lower()
+    if enc == "base64":
+        return _parse_broadlink_base64_to_raw(raw)
     value = json.loads(raw)
     if not isinstance(value, list):
         raise ValueError("Profile raw payload must decode to list")
@@ -222,6 +256,7 @@ class TestLgProfileMatrixRoundtrip(unittest.TestCase):
         for path in lg_profiles:
             doc = json.loads(path.read_text(encoding="utf-8"))
             commands = doc.get("commands") or {}
+            commands_encoding = str(doc.get("commandsEncoding", "Raw"))
             if not isinstance(commands, dict):
                 continue
 
@@ -241,7 +276,9 @@ class TestLgProfileMatrixRoundtrip(unittest.TestCase):
                         summary.total_cases += 1
                         try:
                             expected_temp = float(int(str(temp_key)))
-                            raw = _parse_profile_raw(raw_payload)
+                            raw = _parse_profile_raw(
+                                raw_payload, commands_encoding=commands_encoding
+                            )
                             b64 = encode_raw_to_tuya_base64(raw)
                             raw_roundtrip = _decode_tuya_base64_to_raw(b64)
                             code = _extract_first_lg28_code(raw_roundtrip)
