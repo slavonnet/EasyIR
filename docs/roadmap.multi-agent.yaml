@@ -266,7 +266,7 @@ initial_backlog:
     status: Завершена
   - id: pilot-ac-vertical-slice
     content: Implement one AC protocol and one model end-to-end with capability-driven behavior.
-    status: Завершена в этой ветке
+    status: Завершена
   - id: room-aware-log-sync
     content: Implement room-aware logging, incoming decode mapping, and scoped sync.
     status: Завершена
