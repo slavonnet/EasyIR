@@ -34,7 +34,7 @@ class LearnProfile:
     cluster_id: int
     learn_command_id: int
     read_attr_id: int
-    auto_off_after_read: bool
+    explicit_stop_supported: bool
     timeout_s: float
 
 
@@ -43,7 +43,7 @@ TS1201_LEARN_PROFILE = LearnProfile(
     cluster_id=TS1201_CLUSTER_ID,
     learn_command_id=TS1201_IRLEARN_COMMAND_ID,
     read_attr_id=TS1201_LAST_LEARNED_ATTR_ID,
-    auto_off_after_read=True,
+    explicit_stop_supported=False,
     timeout_s=35.0,
 )
 
@@ -141,8 +141,13 @@ class Ts1201LearnAdapter:
         *,
         endpoint_id: int = DEFAULT_ENDPOINT_ID,
     ) -> dict[str, Any]:
-        await _issue_irlearn(hass, ieee, endpoint_id, False)
-        return {"status": "stopped", "vendor_profile": VENDOR_PROFILE_TS1201_ZOSUNG}
+        # Real-world TS1201 variants can re-enter learn mode on `on_off=false`.
+        # Do not send explicit stop command; rely on device auto-exit behavior.
+        _ = (hass, ieee, endpoint_id)
+        return {
+            "status": "auto_stop_expected",
+            "vendor_profile": VENDOR_PROFILE_TS1201_ZOSUNG,
+        }
 
     async def async_read_learned_code(
         self,

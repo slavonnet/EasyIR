@@ -1,7 +1,7 @@
 {
   "services": {
-    "start_ir_learn": {
-      "name": "Запустить обучение IR",
+    "learn_code": {
+      "name": "Выучить один IR-код",
       "description": "Включает режим Learn на IR-хабе и ждёт один код (или до тайм-аута).",
       "fields": {
         "ieee": {
@@ -12,9 +12,9 @@
           "name": "Endpoint",
           "description": "Endpoint ZHA для IR-кластера."
         },
-        "timeout_sec": {
-          "name": "Тайм-аут (сек)",
-          "description": "Сколько ждать код в режиме Learn."
+        "timeout_seconds": {
+          "name": "Тайм-аут (секунды)",
+          "description": "Сколько ждать IR-код после включения Learn."
         }
       }
     }
