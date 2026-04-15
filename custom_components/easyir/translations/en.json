@@ -22,41 +22,21 @@
     }
   },
   "services": {
-    "start_learn": {
-      "name": "Start IR learn mode",
-      "description": "Enable learn mode for a configured IR hub and keep it active for the timeout window.",
+    "learn_once": {
+      "name": "Learn one IR code",
+      "description": "Enable learn mode for a configured IR hub and wait for one learned code.",
       "fields": {
         "ieee": {
           "name": "IEEE",
           "description": "Optional if default IEEE is set in the integration entry."
+        },
+        "endpoint_id": {
+          "name": "Endpoint id",
+          "description": "Optional endpoint id (default 1)."
         },
         "timeout_seconds": {
           "name": "Timeout (seconds)",
-          "description": "Auto-stop learn mode after timeout, if supported by the hub."
-        }
-      }
-    },
-    "get_last_learned": {
-      "name": "Get last learned IR code",
-      "description": "Read the last learned IR payload from the hub.",
-      "fields": {
-        "ieee": {
-          "name": "IEEE",
-          "description": "Optional if default IEEE is set in the integration entry."
-        },
-        "encoding_hint": {
-          "name": "Encoding hint",
-          "description": "Optional payload decode hint (for example: auto, tuya_base64, broadlink_base64, tuya_learn_base64)."
-        }
-      }
-    },
-    "stop_learn": {
-      "name": "Stop IR learn mode",
-      "description": "Disable learn mode for a configured IR hub.",
-      "fields": {
-        "ieee": {
-          "name": "IEEE",
-          "description": "Optional if default IEEE is set in the integration entry."
+          "description": "How long to wait for one code in learn mode."
         }
       }
     }

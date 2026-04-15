@@ -22,69 +22,21 @@
     }
   },
   "services": {
-    "start_learn": {
-      "name": "Start IR learn mode",
-      "description": "Enable hub learn mode and optionally auto-read one learned IR code.",
+    "learn_code": {
+      "name": "Learn IR code from hub",
+      "description": "Enable IR learn mode on a supported hub, wait for one remote button press, read learned code, then rely on hub auto-exit from learn mode.",
       "fields": {
         "ieee": {
           "name": "IEEE",
-          "description": "Optional if default IEEE is set in integration entry."
+          "description": "Optional if default IEEE is set via integration UI setup."
         },
         "endpoint_id": {
           "name": "Endpoint id",
           "description": "Optional endpoint id (default 1)."
         },
-        "model_hint": {
-          "name": "Model hint",
-          "description": "Optional adapter hint (e.g. ts1201_zosung)."
-        },
-        "auto_read": {
-          "name": "Auto read",
-          "description": "If true, poll/read one learned code and stop learn automatically."
-        },
-        "timeout_sec": {
+        "timeout_seconds": {
           "name": "Timeout seconds",
-          "description": "Max wait for one learned code in auto-read mode."
-        },
-        "poll_interval_sec": {
-          "name": "Poll interval seconds",
-          "description": "Polling interval while waiting for learned code."
-        }
-      }
-    },
-    "read_learned_code": {
-      "name": "Read learned IR code",
-      "description": "Read last learned code attribute and emit EasyIR learned-code event.",
-      "fields": {
-        "ieee": {
-          "name": "IEEE",
-          "description": "Optional if default IEEE is set in integration entry."
-        },
-        "endpoint_id": {
-          "name": "Endpoint id",
-          "description": "Optional endpoint id (default 1)."
-        },
-        "model_hint": {
-          "name": "Model hint",
-          "description": "Optional adapter hint (e.g. ts1201_zosung)."
-        }
-      }
-    },
-    "stop_learn": {
-      "name": "Stop IR learn mode",
-      "description": "Disable hub learn mode.",
-      "fields": {
-        "ieee": {
-          "name": "IEEE",
-          "description": "Optional if default IEEE is set in integration entry."
-        },
-        "endpoint_id": {
-          "name": "Endpoint id",
-          "description": "Optional endpoint id (default 1)."
-        },
-        "model_hint": {
-          "name": "Model hint",
-          "description": "Optional adapter hint (e.g. ts1201_zosung)."
+          "description": "Maximum wait time for one learned code."
         }
       }
     }

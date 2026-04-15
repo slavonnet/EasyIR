@@ -80,15 +80,14 @@ class TestLearnFlow(unittest.IsolatedAsyncioTestCase):
             poll_interval_s=0.01,
         )
         self.assertEqual(code, "QWxhZGRpbjpvcGVuIHNlc2FtZQ==")
-        self.assertEqual(len(hass.calls), 3)
+        self.assertEqual(len(hass.calls), 2)
         start_call = hass.calls[0]
         self.assertEqual(start_call["domain"], ZHA_DOMAIN)
         self.assertEqual(start_call["service"], ZHA_SERVICE)
         self.assertEqual(start_call["data"]["cluster_id"], TS1201_CLUSTER_ID)
         self.assertEqual(start_call["data"]["command"], TS1201_IRLEARN_COMMAND_ID)
         self.assertEqual(start_call["data"]["params"], {"on_off": True})
-        stop_call = hass.calls[2]
-        self.assertEqual(stop_call["data"]["params"], {"on_off": False})
+        self.assertEqual(len(hass.calls), 2)
 
     async def test_learn_once_disables_mode_on_timeout(self) -> None:
         hass = _FakeHass(responses=[{}, {"success": {}}, {"success": {}}, {}])
@@ -100,9 +99,8 @@ class TestLearnFlow(unittest.IsolatedAsyncioTestCase):
                 timeout_s=0.02,
                 poll_interval_s=0.01,
             )
-        self.assertGreaterEqual(len(hass.calls), 3)
+        self.assertGreaterEqual(len(hass.calls), 2)
         self.assertEqual(hass.calls[0]["data"]["params"], {"on_off": True})
-        self.assertEqual(hass.calls[-1]["data"]["params"], {"on_off": False})
 
     async def test_learn_once_dispatch_uses_ts1201_profile(self) -> None:
         hass = _FakeHass(

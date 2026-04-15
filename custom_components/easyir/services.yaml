@@ -73,9 +73,9 @@ send_profile_command:
           max: 240
           mode: box
 
-learn_code:
+learn_once:
   name: Learn IR code from hub
-  description: Enable IR learn mode on a supported hub, wait for one remote button press, read learned code, then disable learn mode.
+  description: Enable IR learn mode on a supported hub, wait for one remote button press, then read learned code from hub attribute.
   fields:
     ieee:
       required: false
@@ -90,7 +90,7 @@ learn_code:
           min: 1
           max: 240
           mode: box
-    timeout_seconds:
+    timeout_s:
       required: false
       default: 25
       selector:
