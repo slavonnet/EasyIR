@@ -275,7 +275,7 @@ initial_backlog:
     status: pending
   - id: assistants-pilot
     content: Deliver pilot remote auto-detect and guided pairing flows.
-    status: pending
+    status: Завершена
   - id: legal-docs-alignment
     content: Align legal and contribution documentation with project licensing policy.
     status: Завершена
