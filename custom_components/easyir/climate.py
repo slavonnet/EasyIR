@@ -25,7 +25,9 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up EasyIR climate entity from config entry."""
-    async_add_entities([EasyIrClimate(hass, entry)], True)
+    profile_path = str(entry.data[CONF_PROFILE_PATH])
+    cap_view = await hass.async_add_executor_job(climate_capability_view, profile_path)
+    async_add_entities([EasyIrClimate(hass, entry, cap_view=cap_view)], True)
 
 
 class EasyIrClimate(ClimateEntity):
@@ -41,14 +43,16 @@ class EasyIrClimate(ClimateEntity):
     _attr_max_temp = 30
     _attr_target_temperature_step = 1
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+    def __init__(
+        self, hass: HomeAssistant, entry: ConfigEntry, *, cap_view: dict[str, Any] | None = None
+    ) -> None:
         """Initialize entity."""
         self.hass = hass
         self._entry = entry
         self._ieee = str(entry.data[CONF_IEEE])
         self._profile_path = str(entry.data[CONF_PROFILE_PATH])
         self._endpoint_id = int(entry.data[CONF_ENDPOINT_ID])
-        self._cap_view = climate_capability_view(self._profile_path)
+        self._cap_view = cap_view or {"protocol": "legacy_profile", "pilot": False}
         self._apply_capability_view(self._cap_view)
         self._attr_unique_id = f"{entry.entry_id}_climate"
         self._attr_device_info = DeviceInfo(
