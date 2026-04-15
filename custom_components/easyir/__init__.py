@@ -12,6 +12,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
 
+from .config_flow import EasyIrConfigFlow
 from .const import (
     CONF_ENDPOINT_ID,
     CONF_IEEE,
@@ -33,6 +34,28 @@ from .transports import Ts1201ZhaTransport
 from .transports.base import IrTransport, TransportSendContext
 
 _LOGGER = logging.getLogger(__name__)
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Migrate stored config when EasyIrConfigFlow.VERSION changes.
+
+    v1 entries matched the historical MVP shape. v2 keeps the same keys but
+    guarantees ``endpoint_id`` is present for service default merging.
+    """
+    if entry.version > EasyIrConfigFlow.VERSION:
+        return False
+
+    data = dict(entry.data)
+    if entry.version < 2:
+        data.setdefault(CONF_ENDPOINT_ID, DEFAULT_ENDPOINT_ID)
+
+    hass.config_entries.async_update_entry(
+        entry,
+        data=data,
+        version=EasyIrConfigFlow.VERSION,
+        minor_version=EasyIrConfigFlow.MINOR_VERSION,
+    )
+    return True
 
 
 def _entry_data_for_ieee(hass: HomeAssistant, ieee: str) -> dict[str, Any] | None:
