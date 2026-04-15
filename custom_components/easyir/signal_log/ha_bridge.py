@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable, Mapping
 from typing import Any
 
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import dispatcher
 from homeassistant.helpers import entity_registry as er
 
-from ..const import CONF_IEEE, CONF_VISIBLE_AREA_IDS, DOMAIN
-from .event_log import IrEventLog, build_outbound_event
+from ..const import CONF_IEEE, CONF_VISIBLE_AREA_IDS, DOMAIN, TS1201_CLUSTER_ID
+from ..helpers import DecodedIRPayload, decode_ir_payload_auto
+from .event_log import IrEventLog, build_inbound_event, build_outbound_event
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -44,6 +46,49 @@ def hub_visible_room_ids_from_entry(entry_data: dict[str, Any]) -> frozenset[str
 
 def _normalize_ieee(value: str) -> str:
     return value.lower().replace(" ", "")
+
+
+def _entry_data_for_ieee(hass: HomeAssistant, ieee: str) -> dict[str, Any] | None:
+    want = _normalize_ieee(ieee)
+    for ent in hass.config_entries.async_entries(DOMAIN):
+        current = _normalize_ieee(str(ent.data.get(CONF_IEEE, "")))
+        if current == want:
+            return dict(ent.data)
+    return None
+
+
+def _iter_payload_values(value: Any) -> Iterable[Any]:
+    if value is None:
+        return ()
+    if isinstance(value, (str, list, tuple)):
+        return (value,)
+    if isinstance(value, Mapping):
+        out: list[Any] = []
+        for key in ("code", "payload", "ir_code", "value", "raw"):
+            candidate = value.get(key)
+            if candidate is not None:
+                out.append(candidate)
+        return tuple(out)
+    return ()
+
+
+def _decode_zha_inbound_payload(event_data: Mapping[str, Any]) -> DecodedIRPayload | None:
+    """Best-effort decode of raw IR payload from a zha_event dictionary."""
+    candidates: list[Any] = []
+    for key in ("params", "command_data", "args", "arguments"):
+        value = event_data.get(key)
+        if isinstance(value, (list, tuple)):
+            for item in value:
+                candidates.extend(_iter_payload_values(item))
+        else:
+            candidates.extend(_iter_payload_values(value))
+    candidates.extend(_iter_payload_values(event_data))
+    for payload in candidates:
+        try:
+            return decode_ir_payload_auto(payload)
+        except ValueError:
+            continue
+    return None
 
 
 def _easyir_device_id_for_ieee(hass: HomeAssistant, ieee: str) -> str | None:
@@ -139,14 +184,7 @@ def async_setup_inbound_listener(hass: HomeAssistant) -> None:
         ieee = event.get("ieee")
         if not ieee:
             return
-        entries = hass.config_entries.async_entries(DOMAIN)
-        entry_data: dict[str, Any] | None = None
-        for ent in entries:
-            if _normalize_ieee(str(ent.data.get(CONF_IEEE, ""))) == _normalize_ieee(
-                str(ieee)
-            ):
-                entry_data = dict(ent.data)
-                break
+        entry_data = _entry_data_for_ieee(hass, str(ieee))
         if entry_data is None:
             return
 
@@ -206,10 +244,60 @@ def async_setup_inbound_listener(hass: HomeAssistant) -> None:
                 payload,
             )
 
+    @callback
+    def _on_zha_event(event: Event) -> None:
+        """Capture inbound IR payloads from ZHA events for Signal Log."""
+        data = event.data if isinstance(event.data, Mapping) else {}
+        async_handle_zha_event_for_easyir(hass, data)
+
     dispatcher.async_dispatcher_connect(hass, SIGNAL_INBOUND_DECODED, _on_inbound)
+    hass.bus.async_listen("zha_event", _on_zha_event)
 
 
 @callback
 def async_fire_inbound_decoded(hass: HomeAssistant, payload: dict[str, Any]) -> None:
     """Fire internal inbound-decoded event for room-scoped sync (transport / ZHA hooks)."""
     dispatcher.async_dispatcher_send(hass, SIGNAL_INBOUND_DECODED, payload)
+
+
+@callback
+def async_handle_zha_event_for_easyir(
+    hass: HomeAssistant, event_data: Mapping[str, Any]
+) -> bool:
+    """Decode supported ZHA inbound payload and append it to EasyIR Signal Log."""
+    cluster_id = event_data.get("cluster_id")
+    if cluster_id is not None:
+        try:
+            if int(cluster_id) != TS1201_CLUSTER_ID:
+                return False
+        except (TypeError, ValueError):
+            return False
+
+    ieee_raw = event_data.get("device_ieee") or event_data.get("ieee")
+    if not isinstance(ieee_raw, str) or not ieee_raw.strip():
+        return False
+    ieee = ieee_raw.strip()
+    entry_data = _entry_data_for_ieee(hass, ieee)
+    if entry_data is None:
+        return False
+
+    decoded_payload = _decode_zha_inbound_payload(event_data)
+    if decoded_payload is None:
+        return False
+
+    room_id = resolve_ieee_primary_area_id(hass, ieee)
+    get_domain_event_log(hass).append(
+        build_inbound_event(
+            room_id=room_id,
+            ieee=ieee,
+            timings=decoded_payload.raw_timings,
+            protocol_hint=decoded_payload.source_encoding,
+            integrity_metadata={
+                "source": "zha_event",
+                "cluster_id": event_data.get("cluster_id"),
+                "command": event_data.get("command"),
+                "entry_has_room_filter": bool(hub_visible_room_ids_from_entry(entry_data)),
+            },
+        )
+    )
+    return True
