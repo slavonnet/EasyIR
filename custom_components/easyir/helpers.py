@@ -1,10 +1,12 @@
-"""Helpers for profile -> Tuya TS1201 encoding."""
+"""IR helpers: profile parsing + vendor format transcoding."""
 
 from __future__ import annotations
 
 import base64
+import binascii
 import json
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +35,215 @@ def encode_raw_to_tuya_base64(raw_timings: list[int]) -> str:
     return base64.b64encode(bytes(encoded)).decode()
 
 
+def decode_tuya_base64_to_raw(payload: str) -> list[int]:
+    """Decode Tuya TS1201 payload back to alternating mark/space timings."""
+    data = _base64_decode_loose(payload)
+    pos = 0
+    bytes_flat: list[int] = []
+    while pos < len(data):
+        chunk_len = data[pos] + 1
+        pos += 1
+        if pos + chunk_len > len(data):
+            raise ValueError("Invalid Tuya payload chunk length")
+        bytes_flat.extend(data[pos : pos + chunk_len])
+        pos += chunk_len
+
+    if len(bytes_flat) % 2 != 0:
+        raise ValueError("Invalid Tuya payload: odd number of timing bytes")
+
+    u16: list[int] = []
+    for i in range(0, len(bytes_flat), 2):
+        v = bytes_flat[i] | (bytes_flat[i + 1] << 8)
+        u16.append(v)
+
+    timings: list[int] = []
+    for i, val in enumerate(u16):
+        timings.append(val if i % 2 == 0 else -val)
+    return timings
+
+
+def encode_raw_to_broadlink_base64(raw_timings: list[int]) -> str:
+    """Encode timings into Broadlink-style base64 packet."""
+    # Broadlink IR timing resolution used by common Home Assistant adapters.
+    payload = bytearray()
+    for timing in raw_timings:
+        units = max(1, min(0xFFFF, int(round(abs(int(timing)) * 269 / 8192))))
+        if units <= 0xFF:
+            payload.append(units)
+        else:
+            payload.extend((0x00, (units >> 8) & 0xFF, units & 0xFF))
+
+    packet = bytearray((0x26, 0x00, len(payload) & 0xFF, (len(payload) >> 8) & 0xFF))
+    packet.extend(payload)
+    packet.extend((0x0D, 0x05))
+    return base64.b64encode(bytes(packet)).decode()
+
+
+def decode_broadlink_base64_to_raw(payload: str) -> list[int]:
+    """Decode Broadlink-style base64 packet to alternating mark/space timings."""
+    data = _base64_decode_loose(payload)
+    if len(data) < 6:
+        raise ValueError("Broadlink payload is too short")
+    if data[0] != 0x26:
+        raise ValueError("Not a Broadlink IR packet signature")
+
+    declared_len = data[2] | (data[3] << 8)
+    start = 4
+    end = start + declared_len
+    if end > len(data):
+        raise ValueError("Broadlink payload length exceeds packet size")
+    body = data[start:end]
+    # Some payload variants include trailer bytes inside declared window, some
+    # keep additional zero padding after trailer.
+    trailer_pos = body.rfind(b"\x0d\x05")
+    if trailer_pos != -1:
+        body = body[:trailer_pos]
+    body = body.rstrip(b"\x00")
+    if not body:
+        raise ValueError("Broadlink payload has empty body")
+
+    timings: list[int] = []
+    idx = 0
+    while idx < len(body):
+        b = body[idx]
+        idx += 1
+        if b == 0:
+            if idx + 1 >= len(body):
+                # Tolerate legacy packets with trailing 0x00 padding nibble.
+                if idx >= len(body) and body[-1] == 0:
+                    break
+                raise ValueError("Broadlink extended timing is truncated")
+            units = (body[idx] << 8) | body[idx + 1]
+            idx += 2
+        else:
+            units = b
+        microseconds = int(round(units * 8192 / 269))
+        sign = 1 if len(timings) % 2 == 0 else -1
+        timings.append(sign * microseconds)
+    if not timings:
+        raise ValueError("Broadlink payload has no timing entries")
+    return timings
+
+
+@dataclass(frozen=True)
+class DecodedIRPayload:
+    raw_timings: list[int]
+    source_encoding: str
+
+
+def decode_ir_payload(raw: Any, encoding: str | None = None) -> DecodedIRPayload:
+    """Decode profile payload into canonical timings for known encodings."""
+    normalized = (encoding or "").strip().lower().replace("-", "_")
+    if normalized in {"", "auto"}:
+        return decode_ir_payload_auto(raw)
+    if normalized in {"raw", "json", "raw_json", "list"}:
+        return DecodedIRPayload(raw_timings=_parse_raw(raw), source_encoding="raw")
+    if normalized in {"tuya", "tuya_base64", "ts1201", "ts1201_base64"}:
+        if not isinstance(raw, str):
+            raise ValueError("Tuya payload must be a base64 string")
+        return DecodedIRPayload(
+            raw_timings=decode_tuya_base64_to_raw(raw),
+            source_encoding="tuya_base64",
+        )
+    if normalized in {"broadlink", "broadcom", "base64", "broadlink_base64"}:
+        if not isinstance(raw, str):
+            raise ValueError("Broadlink payload must be a base64 string")
+        return DecodedIRPayload(
+            raw_timings=decode_broadlink_base64_to_raw(raw),
+            source_encoding="broadlink_base64",
+        )
+    raise ValueError(f"Unsupported IR encoding hint: {encoding!r}")
+
+
+def decode_ir_payload_auto(raw: Any) -> DecodedIRPayload:
+    """Try to detect payload format and decode it to canonical timings."""
+    if isinstance(raw, (list, tuple)):
+        return DecodedIRPayload(raw_timings=[int(x) for x in raw], source_encoding="raw")
+    if raw is None:
+        raise ValueError("Command raw payload is null")
+    if not isinstance(raw, str):
+        raise ValueError(
+            f"Command raw must be a string or list, got {type(raw).__name__}"
+        )
+    stripped = raw.strip()
+    if not stripped:
+        raise ValueError("Command raw payload is empty")
+
+    # First, try native JSON raw list format.
+    try:
+        return DecodedIRPayload(raw_timings=_parse_raw(stripped), source_encoding="raw")
+    except ValueError:
+        pass
+
+    # Then attempt known base64 transport/vendor formats.
+    if _looks_like_broadlink_packet(stripped):
+        return DecodedIRPayload(
+            raw_timings=decode_broadlink_base64_to_raw(stripped),
+            source_encoding="broadlink_base64",
+        )
+
+    try:
+        return DecodedIRPayload(
+            raw_timings=decode_tuya_base64_to_raw(stripped),
+            source_encoding="tuya_base64",
+        )
+    except ValueError:
+        pass
+
+    # Final fallback: some Broadlink payloads omit/alter padding.
+    try:
+        return DecodedIRPayload(
+            raw_timings=decode_broadlink_base64_to_raw(stripped),
+            source_encoding="broadlink_base64",
+        )
+    except ValueError as err:
+        raise ValueError(f"Unable to auto-detect IR payload format: {err}") from err
+
+
+def transcode_ir_payload(
+    raw: Any,
+    *,
+    target_encoding: str,
+    source_encoding: str | None = None,
+) -> str | list[int]:
+    """Transcode payload between raw / Tuya base64 / Broadlink base64 formats."""
+    decoded = decode_ir_payload(raw, encoding=source_encoding)
+    target = target_encoding.strip().lower().replace("-", "_")
+    if target in {"raw", "json", "raw_json", "list"}:
+        return list(decoded.raw_timings)
+    if target in {"tuya", "tuya_base64", "ts1201", "ts1201_base64"}:
+        return encode_raw_to_tuya_base64(decoded.raw_timings)
+    if target in {"broadlink", "broadcom", "base64", "broadlink_base64"}:
+        return encode_raw_to_broadlink_base64(decoded.raw_timings)
+    raise ValueError(f"Unsupported target encoding: {target_encoding!r}")
+
+
+def _base64_decode_loose(payload: str) -> bytes:
+    stripped = "".join(payload.strip().split())
+    if not stripped:
+        raise ValueError("Empty base64 payload")
+    try:
+        return base64.b64decode(stripped, validate=True)
+    except (binascii.Error, ValueError):
+        # Some profile payloads have missing trailing padding.
+        pad = "=" * ((4 - (len(stripped) % 4)) % 4)
+        try:
+            return base64.b64decode(stripped + pad, validate=False)
+        except (binascii.Error, ValueError) as err:
+            raise ValueError(f"Invalid base64 payload: {err}") from err
+
+
+def _looks_like_broadlink_packet(payload: str) -> bool:
+    try:
+        data = _base64_decode_loose(payload)
+    except ValueError:
+        return False
+    if len(data) < 6 or data[0] != 0x26:
+        return False
+    declared_len = data[2] | (data[3] << 8)
+    return declared_len > 0 and (4 + declared_len) <= len(data)
+
+
 def _parse_raw(raw: Any) -> list[int]:
     """Parse raw timings from profile (JSON string or embedded array)."""
     if isinstance(raw, (list, tuple)):
@@ -55,6 +266,18 @@ def _parse_raw(raw: Any) -> list[int]:
     if not isinstance(value, list):
         raise ValueError("Command raw must decode to a JSON array of integers")
     return [int(x) for x in value]
+
+
+def _decode_profile_command_payload(raw: Any, commands_encoding: str | None) -> list[int]:
+    """Decode profile command payload using encoding hint with auto fallback."""
+    hint = (commands_encoding or "").strip()
+    if not hint:
+        return decode_ir_payload_auto(raw).raw_timings
+    try:
+        return decode_ir_payload(raw, encoding=hint).raw_timings
+    except ValueError:
+        # Some legacy profiles have incorrect commandsEncoding metadata.
+        return decode_ir_payload_auto(raw).raw_timings
 
 
 def _load_profile_document(path: str) -> dict[str, Any]:
@@ -142,6 +365,7 @@ def resolve_profile_raw(
         )
 
     doc = _load_profile_document(path)
+    commands_encoding = str(doc.get("commandsEncoding", "raw"))
     if profile_uses_lg_universal_encoder(doc):
         normalized_action = str(action).strip().lower()
         special_actions: dict[str, tuple[int, str]] = {
@@ -216,7 +440,7 @@ def resolve_profile_raw(
 
     action_key = str(action).strip().lower()
     if action_key == "off":
-        return _parse_raw(commands["off"])
+        return _decode_profile_command_payload(commands["off"], commands_encoding)
 
     if hvac_mode is None or fan_mode is None or temperature is None:
         raise ValueError(
@@ -237,4 +461,4 @@ def resolve_profile_raw(
             f"(tried '{fan_key}')"
         )
     raw = commands[profile_action][fan_key][str(temperature)]
-    return _parse_raw(raw)
+    return _decode_profile_command_payload(raw, commands_encoding)

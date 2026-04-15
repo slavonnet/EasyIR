@@ -73,12 +73,14 @@ class CodecRegistry:
 
 
 def default_codec_registry() -> CodecRegistry:
-    """Built-in MVP chain: raw timings passthrough + TS1201 base64 for ZHA."""
+    """Built-in MVP chain: raw timings passthrough + vendor/transport encoders."""
     # Local imports keep helpers optional for tests importing only model/registry.
+    from .codec_broadlink import BroadlinkBase64Encoder
     from .codec_raw_timings import RawTimingsCodec
     from .codec_ts1201_zha import Ts1201ZhaBase64Encoder
 
     reg = CodecRegistry()
     reg.register_codec(RawTimingsCodec())
     reg.register_transport_encoder(Ts1201ZhaBase64Encoder())
+    reg.register_transport_encoder(BroadlinkBase64Encoder())
     return reg

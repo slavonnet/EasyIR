@@ -7,6 +7,7 @@ from .registry import CodecRegistry, IrCodec, TransportPayloadEncoder, default_c
 from .service_adapter import (
     encode_profile_command_for_zha_ts1201,
     encode_raw_timings_for_zha_ts1201,
+    transcode_ir_between_transports,
 )
 
 __all__ = [
@@ -17,4 +18,5 @@ __all__ = [
     "default_codec_registry",
     "encode_profile_command_for_zha_ts1201",
     "encode_raw_timings_for_zha_ts1201",
+    "transcode_ir_between_transports",
 ]
