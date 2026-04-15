@@ -1,6 +1,6 @@
-# EasyIR MVP compatibility baseline
+# EasyIR release compatibility baseline
 
-This document freezes **user-visible contracts** and **stored configuration shape** for the current MVP so later refactors (IR core, transports, migrations) can be checked against a stable baseline.
+This document freezes **user-visible contracts** and **stored configuration shape** for the current release so later refactors (IR core, transports, migrations) can be checked against a stable baseline.
 
 It does not replace `AGENTS.md` policy; it **records concrete artifacts** (service ids, config keys, bundled paths) that upgrades must preserve unless explicitly versioned.
 

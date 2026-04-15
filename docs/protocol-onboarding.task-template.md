@@ -1,6 +1,6 @@
 # Protocol onboarding task template (parallel agents)
 
-Use this document when launching **implementation agents** to add **one protocol and one model** after the pilot vertical slice is stable. It aligns with `docs/roadmap.multi-agent.yaml` (pilot-first rule, phase 3 scale-out), `AGENTS.md` (compatibility, PR hygiene), and orchestrator rules in **AGENTS.md §13**.
+Use this document when launching **implementation agents** to add **one protocol and one model** after the pilot vertical slice is stable. It aligns with the active project roadmap file (created from `docs/agents-roadmap-example.md`), `AGENTS.md` (compatibility, PR hygiene), and orchestrator rules in **AGENTS.md §13**.
 
 ## Preconditions (orchestrator)
 
@@ -10,8 +10,8 @@ Use this document when launching **implementation agents** to add **one protocol
 
 ## Required context (paste into every agent brief)
 
-- `docs/roadmap.multi-agent.yaml` is the **source of truth** for architecture, sequencing, and templates.
-- `README.md` describes the **current MVP**; it does not cap the target architecture.
+- Active project roadmap file (created from `docs/agents-roadmap-example.md`) is the **source of truth** for architecture, sequencing, and templates.
+- `README.md` describes the current release state; it does not cap the target architecture.
 - **Backward compatibility** for existing installs is mandatory (see **Compatibility constraints** below).
 - **AGENTS.md §6–7, §11–12**: small, reviewable commits; no unrelated refactors; no churn in `custom_components/easyir/profiles/climate/*.json` unless the task is explicitly profile-data work.
 
@@ -29,13 +29,13 @@ Fill every field before the agent starts. Remove bracketed hints when sending.
 | **Concrete paths** | List expected dirs/files (e.g. `custom_components/easyir/protocols/`, `tests/`, …) — match repo layout after pilot merge. |
 | **Compatibility constraints** | Preserve `easyir.send_raw` and `easyir.send_profile_command` contracts. Do not break bundled **profile path** resolution; any `CONF_PROFILE_PATH` / bundled path change requires `async_migrate_entry` and tests proving legacy entries still send commands. Profile schema changes must be **additive** within the major line unless an explicit versioned break is approved. |
 | **Migrations** | `none` **or** describe `async_migrate_entry` / alias stub if paths or stored config change. |
-| **Tests** | `python -m unittest discover -s tests -v` plus any new unit tests for the slice; add migration/legacy-send tests if config or path resolution is touched. |
+| **Tests** | `python3 -m unittest discover -s tests -v` plus any new unit tests for the slice; add migration/legacy-send tests if config or path resolution is touched. |
 | **Acceptance criteria** | Command generation parity for covered actions; decode round-trip or mapping tests pass; capability-driven behavior matches the single model’s feature set; no regressions for existing transports/protocols not in scope. |
 | **Risks / assumptions** | e.g. hardware samples unavailable → fixture-only validation; model variant ambiguity → document assumption. |
 
 ## Compatibility constraints (checklist)
 
-Derived from `docs/roadmap.multi-agent.yaml` (`technical_requirements.compatibility`) and `AGENTS.md` §2.
+Derived from the active project roadmap file (`technical_requirements.compatibility`) and `AGENTS.md` §2.
 
 - [ ] Existing config entries keep working without re-adding devices/hubs.
 - [ ] Service contracts unchanged: `easyir.send_raw`, `easyir.send_profile_command`.

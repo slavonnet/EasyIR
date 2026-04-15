@@ -2,7 +2,8 @@
 
 Author: Badalyan Vyacheslav
 
-Custom Home Assistant integration to send IR profile commands via Tuya TS1201 over ZHA.
+Custom Home Assistant integration for IR command delivery in Home Assistant with
+backward-compatible services and an expanding protocol/transport core.
 
 **License and contributing:** see [`LICENSE`](LICENSE) and [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
@@ -18,7 +19,15 @@ Custom Home Assistant integration to send IR profile commands via Tuya TS1201 ov
 - Supports defaults from UI: ZHA device → resolved `ieee`, resolved `profile_path`, `endpoint_id`.
 - Includes built-in send rate-limit and profile file caching.
 
-## Quick start (MVP 0.0.1)
+## Статус проекта
+
+Текущая ветка — **недоделанный релиз**, а не MVP:
+
+- базовый рабочий сценарий для Zigbee TS1201/ZHA реализован;
+- добавлены универсальные IR-преобразования и пилотные protocol-aware механизмы;
+- часть целевых возможностей (полный мульти-транспорт, расширенные UI-тулы, масштабирование по протоколам) еще в развитии.
+
+## Quick start (текущий релиз)
 
 1. Put this project into a GitHub repository.
 2. Update placeholders in `custom_components/easyir/manifest.json`:
@@ -50,7 +59,7 @@ IR command tables ship **inside the integration**:
 
 **Normal user path:** install EasyIR → add integration → pick **Demo AC** (sanity check) or search the long list for your code set (e.g. **LG — P12RK** = file `7062` → value `climate/7062.json`) → no manual `/config/...` path.
 
-**Bundled climate library (bootstrap):** the `climate/*.json` set is a **temporary** compatibility layer: same general layout (`commands`, etc.) as common community climate dumps (see e.g. [this tree](https://github.com/smartHomeHub/SmartIR/tree/master/codes/climate) for reference). Long term EasyIR is meant to use **generated** profiles; refreshing this bundle is a maintainer-side offline step, not part of the runtime integration.
+**Bundled climate library (bootstrap):** the `climate/*.json` set is a compatibility layer: same general layout (`commands`, etc.) as common community climate dumps (see e.g. [this tree](https://github.com/smartHomeHub/SmartIR/tree/master/codes/climate) for reference). Long term EasyIR is meant to rely more on protocol-driven generation; refreshing this bundle is a maintainer-side offline step, not part of the runtime integration.
 
 **Advanced:** if your codes only exist under `/config/...`, choose **Custom path** and paste the full path.
 
@@ -142,7 +151,12 @@ mode: single
 - Integration enforces a small delay between sends to the same device.
 - Climate entity is optimistic and stores last sent state.
 
+## Документы для агентной разработки
+
+- [`AGENTS.md`](AGENTS.md) — актуальные правила разработки, совместимости и оркестрации.
+- [`docs/agents-roadmap-example.md`](docs/agents-roadmap-example.md) — пример структуры нового roadmap-файла, если нужно собрать план с нуля.
+
 ## Tests
 
 - Run unit tests from repository root:
-  - `python -m unittest discover -s tests -v`
+  - `python3 -m unittest discover -s tests -v`
