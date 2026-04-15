@@ -257,7 +257,7 @@ initial_backlog:
     status: Завершена
   - id: core-codec-foundation
     content: Implement canonical IR model + codec registry + service compatibility adapter.
-    status: В Работе
+    status: Завершена
   - id: transport-abstraction
     content: Introduce transport interface, migrate TS1201 adapter, add supported hub discovery filters.
     status: pending
