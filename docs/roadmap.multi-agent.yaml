@@ -239,7 +239,7 @@ pilot_first_rule:
 initial_backlog:
   - id: baseline-audit
     content: Lock compatibility invariants and create baseline regression fixtures.
-    status: pending
+    status: В Работе
   - id: core-codec-foundation
     content: Implement canonical IR model + codec registry + service compatibility adapter.
     status: pending
@@ -263,10 +263,10 @@ initial_backlog:
     status: pending
   - id: legal-docs-alignment
     content: Align legal and contribution documentation with project licensing policy.
-    status: pending
+    status: В Работе
   - id: protocol-scale-template
     content: Publish reusable protocol onboarding task template for parallel agents.
-    status: pending
+    status: В Работе
 
 agent_task_templates:
   protocol_slice:
