@@ -20,5 +20,25 @@
         }
       }
     }
+  },
+  "services": {
+    "learn_once": {
+      "name": "Learn one IR code",
+      "description": "Enable learn mode for a configured IR hub and wait for one learned code.",
+      "fields": {
+        "ieee": {
+          "name": "IEEE",
+          "description": "Optional if default IEEE is set in the integration entry."
+        },
+        "endpoint_id": {
+          "name": "Endpoint id",
+          "description": "Optional endpoint id (default 1)."
+        },
+        "timeout_seconds": {
+          "name": "Timeout (seconds)",
+          "description": "How long to wait for one code in learn mode."
+        }
+      }
+    }
   }
 }

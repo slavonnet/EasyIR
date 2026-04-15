@@ -1,4 +1,24 @@
 {
+  "services": {
+    "learn_code": {
+      "name": "Выучить один IR-код",
+      "description": "Включает режим Learn на IR-хабе и ждёт один код (или до тайм-аута).",
+      "fields": {
+        "ieee": {
+          "name": "IEEE устройства",
+          "description": "Необязательно, если задано по умолчанию в интеграции."
+        },
+        "endpoint_id": {
+          "name": "Endpoint",
+          "description": "Endpoint ZHA для IR-кластера."
+        },
+        "timeout_seconds": {
+          "name": "Тайм-аут (секунды)",
+          "description": "Сколько ждать IR-код после включения Learn."
+        }
+      }
+    }
+  },
   "config": {
     "abort": {
       "zha_not_configured": "Сначала настройте ZHA, затем добавьте EasyIR."
