@@ -23,6 +23,7 @@ from .const import (
     PLATFORMS,
     SERVICE_SEND_RAW,
     SERVICE_SEND_COMMAND,
+    SERVICE_LEARN_ONCE,
     TS1201_ENDPOINT_ID,
 )
 from .ir_core.service_adapter import (
@@ -32,6 +33,7 @@ from .ir_core.service_adapter import (
 from .signal_log.api import async_register_signal_log_api
 from .signal_log.ha_bridge import async_setup_inbound_listener, log_outbound_send
 from .signal_log.panel import async_register_signal_log_panel
+from .learn import learn_once
 from .transports import Ts1201ZhaTransport
 from .transports.base import IrTransport, TransportSendContext
 
@@ -87,6 +89,16 @@ SEND_COMMAND_SCHEMA = vol.Schema(
         vol.Optional("fan_mode"): cv.string,
         vol.Optional("temperature"): vol.Coerce(int),
         vol.Optional(CONF_ENDPOINT_ID, default=DEFAULT_ENDPOINT_ID): vol.Coerce(int),
+    }
+)
+
+LEARN_ONCE_SCHEMA = vol.Schema(
+    {
+        vol.Optional(CONF_IEEE): cv.string,
+        vol.Optional(CONF_ENDPOINT_ID, default=DEFAULT_ENDPOINT_ID): vol.Coerce(int),
+        vol.Optional("timeout_s", default=20): vol.All(
+            vol.Coerce(int), vol.Range(min=1, max=120)
+        ),
     }
 )
 
@@ -190,6 +202,19 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
             protocol_hint="profile",
         )
 
+    async def handle_learn_once(call: ServiceCall) -> None:
+        ieee = _get_merged_value(call, CONF_IEEE)
+        if not ieee:
+            raise vol.Invalid("Missing required 'ieee' in service data or config entry")
+        endpoint_id = _get_merged_value(call, CONF_ENDPOINT_ID) or TS1201_ENDPOINT_ID
+        timeout_s = int(call.data.get("timeout_s", 20))
+        await learn_once(
+            hass,
+            ieee=str(ieee),
+            endpoint_id=int(endpoint_id),
+            timeout_s=timeout_s,
+        )
+
     hass.services.async_register(
         DOMAIN,
         SERVICE_SEND_RAW,
@@ -201,6 +226,12 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         SERVICE_SEND_COMMAND,
         handle_send_command,
         schema=SEND_COMMAND_SCHEMA,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_LEARN_ONCE,
+        handle_learn_once,
+        schema=LEARN_ONCE_SCHEMA,
     )
 
     return True
