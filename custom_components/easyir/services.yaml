@@ -72,3 +72,29 @@ send_profile_command:
           min: 1
           max: 240
           mode: box
+
+learn_code:
+  name: Learn IR code from hub
+  description: Enable IR learn mode on a supported hub, wait for one remote button press, read learned code, then disable learn mode.
+  fields:
+    ieee:
+      required: false
+      description: Optional if default IEEE is set via integration UI setup.
+      selector:
+        text:
+    endpoint_id:
+      required: false
+      default: 1
+      selector:
+        number:
+          min: 1
+          max: 240
+          mode: box
+    timeout_seconds:
+      required: false
+      default: 25
+      selector:
+        number:
+          min: 5
+          max: 120
+          mode: box
