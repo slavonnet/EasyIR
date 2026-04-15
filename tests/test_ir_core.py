@@ -22,7 +22,9 @@ _SPEC.loader.exec_module(_HELPERS)
 
 clear_profile_cache = _HELPERS.clear_profile_cache
 decode_broadlink_base64_to_raw = _HELPERS.decode_broadlink_base64_to_raw
+decode_tuya_learn_base64_to_raw = _HELPERS.decode_tuya_learn_base64_to_raw
 encode_raw_to_broadlink_base64 = _HELPERS.encode_raw_to_broadlink_base64
+encode_raw_to_tuya_learn_base64 = _HELPERS.encode_raw_to_tuya_learn_base64
 encode_raw_to_tuya_base64 = _HELPERS.encode_raw_to_tuya_base64
 resolve_profile_raw = _HELPERS.resolve_profile_raw
 
@@ -65,6 +67,16 @@ class TestCanonicalModelAndCodec(unittest.TestCase):
         self.assertEqual(len(decoded), len(timings))
         for got, exp in zip(decoded, timings):
             self.assertLessEqual(abs(got - exp), 80)
+
+    def test_default_registry_encodes_tuya_learn_transport(self) -> None:
+        reg = default_codec_registry()
+        codec = reg.get_codec("raw_timings")
+        timings = [8956, -4138, 520, -1576, 520, -520, 520, -1576, 520]
+        frame = codec.frame_from_timings(timings)
+        payload = reg.encode_for_transport("tuya_learn_base64", frame)
+        self.assertEqual(payload, encode_raw_to_tuya_learn_base64(timings))
+        decoded = decode_tuya_learn_base64_to_raw(payload)
+        self.assertEqual(decoded, timings)
 
 
 class TestServiceAdapter(unittest.TestCase):

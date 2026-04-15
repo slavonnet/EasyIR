@@ -45,6 +45,8 @@ LG_CMD_POWER_DOWN: Final[int] = 0xC005
 LG_CMD_LIGHT: Final[int] = 0xC00A
 LG_CMD_AUTO_CLEAN_ON: Final[int] = 0xC00B
 LG_CMD_AUTO_CLEAN_OFF: Final[int] = 0xC00C
+LG_CMD_IONIZER_OFF: Final[int] = 0xC02F
+LG_CMD_IONIZER_ON: Final[int] = 0xC039
 
 # Nominal LG AC carrier timings (Arduino-IRremote ac_LG.hpp comments, type AKB73315611).
 HEADER_MARK_US: Final[int] = 8900
@@ -227,6 +229,10 @@ def _decode_feature_flags(command16: int) -> dict[str, Any]:
         flags["auto_clean"] = True
     elif command16 == LG_CMD_AUTO_CLEAN_OFF:
         flags["auto_clean"] = False
+    elif command16 == LG_CMD_IONIZER_ON:
+        flags["ionizer"] = True
+    elif command16 == LG_CMD_IONIZER_OFF:
+        flags["ionizer"] = False
     elif LG_CMD_TIMER_ON_BASE <= command16 <= 0x8FFF:
         flags["timer_on_minutes"] = command16 & 0x0FFF
     elif LG_CMD_TIMER_OFF_BASE <= command16 <= 0x9FFF:
@@ -257,6 +263,8 @@ def _required_supported_flags(feature_flags: dict[str, Any]) -> frozenset[str]:
         return frozenset({"light"})
     if "auto_clean" in feature_flags:
         return frozenset({"auto_clean"})
+    if "ionizer" in feature_flags:
+        return frozenset({"ionizer"})
     if "timer_on_minutes" in feature_flags:
         return frozenset({"timer_on"})
     if "timer_off_minutes" in feature_flags:

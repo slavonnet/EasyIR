@@ -13,6 +13,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "custom_components" / "easyir"))
 
 from protocols.lg_universal.engine import (
+    LG_CMD_IONIZER_OFF,
+    LG_CMD_IONIZER_ON,
     LG_OFF_COMMAND,
     LgDecodeResult,
     decode_lg_ac_strict,
@@ -116,6 +118,14 @@ class TestLgUniversalEngine(unittest.TestCase):
         self.assertIsNone(r.error)
         self.assertIn("energy_saving", r.feature_flags)
         self.assertTrue(r.feature_flags["energy_saving"])
+
+    def test_strict_decode_exposes_ionizer_command_words(self) -> None:
+        ion_on = decode_lg_ac_strict(encode_lg_command16(LG_CMD_IONIZER_ON))
+        ion_off = decode_lg_ac_strict(encode_lg_command16(LG_CMD_IONIZER_OFF))
+        self.assertTrue(ion_on.ok)
+        self.assertTrue(ion_off.ok)
+        self.assertTrue(ion_on.feature_flags.get("ionizer"))
+        self.assertFalse(ion_off.feature_flags.get("ionizer"))
 
     def test_strict_decode_rejects_state_with_unsupported_mode(self) -> None:
         # Build valid checksum frame with unknown mode value (5) and ensure strict state rejection.
@@ -254,6 +264,36 @@ class TestResolveProfileAdapter(unittest.TestCase):
             off_raw = resolve_profile_raw(
                 path=str(path),
                 action="energy_saving_off",
+                hvac_mode="cool",
+                fan_mode="auto",
+                temperature=24,
+            )
+            self.assertEqual(len(on_raw), 59)
+            self.assertEqual(len(off_raw), 59)
+            self.assertNotEqual(on_raw, off_raw)
+
+    def test_universal_supports_ionizer_toggle_action(self) -> None:
+        payload = {
+            "operationModes": ["cool"],
+            "fanModes": ["auto"],
+            "easyir_protocol": "lg_universal_v1",
+            "easyir_encoding": "lg28",
+            "easyir_feature_flags": ["ionizer"],
+            "commands": {"off": "[1,-2]"},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "x.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            on_raw = resolve_profile_raw(
+                path=str(path),
+                action="ionizer_on",
+                hvac_mode="cool",
+                fan_mode="auto",
+                temperature=24,
+            )
+            off_raw = resolve_profile_raw(
+                path=str(path),
+                action="ionizer_off",
                 hvac_mode="cool",
                 fan_mode="auto",
                 temperature=24,

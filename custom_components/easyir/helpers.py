@@ -62,6 +62,33 @@ def decode_tuya_base64_to_raw(payload: str) -> list[int]:
     return timings
 
 
+def encode_raw_to_tuya_learn_base64(raw_timings: list[int]) -> str:
+    """Encode timings into Tuya learn-code (FastLZ stream wrapped as base64)."""
+    if not raw_timings:
+        raise ValueError("raw_timings must not be empty for Tuya learn encoding")
+    payload = bytearray()
+    for timing in raw_timings:
+        val = _to_u16(timing)
+        payload.extend((val & 0xFF, (val >> 8) & 0xFF))
+    compressed = _tuya_fastlz_compress_literal(bytes(payload))
+    return base64.b64encode(compressed).decode()
+
+
+def decode_tuya_learn_base64_to_raw(payload: str) -> list[int]:
+    """Decode Tuya learn-code base64 (FastLZ) to alternating mark/space timings."""
+    data = _base64_decode_loose(payload)
+    decompressed = _tuya_fastlz_decompress(data)
+    if len(decompressed) % 2 != 0:
+        raise ValueError("Invalid Tuya learn payload: odd number of timing bytes")
+    timings: list[int] = []
+    for i in range(0, len(decompressed), 2):
+        val = decompressed[i] | (decompressed[i + 1] << 8)
+        timings.append(val if len(timings) % 2 == 0 else -val)
+    if not _looks_like_ir_timings(timings):
+        raise ValueError("Decoded Tuya learn payload does not look like IR timings")
+    return timings
+
+
 def encode_raw_to_broadlink_base64(raw_timings: list[int]) -> str:
     """Encode timings into Broadlink-style base64 packet."""
     # Broadlink IR timing resolution used by common Home Assistant adapters.
@@ -145,6 +172,18 @@ def decode_ir_payload(raw: Any, encoding: str | None = None) -> DecodedIRPayload
             raw_timings=decode_tuya_base64_to_raw(raw),
             source_encoding="tuya_base64",
         )
+    if normalized in {
+        "tuya_learn",
+        "tuya_learn_base64",
+        "tuya_fastlz",
+        "tuya_ir_learn",
+    }:
+        if not isinstance(raw, str):
+            raise ValueError("Tuya learn payload must be a base64 string")
+        return DecodedIRPayload(
+            raw_timings=decode_tuya_learn_base64_to_raw(raw),
+            source_encoding="tuya_learn_base64",
+        )
     if normalized in {"broadlink", "broadcom", "base64", "broadlink_base64"}:
         if not isinstance(raw, str):
             raise ValueError("Broadlink payload must be a base64 string")
@@ -190,6 +229,14 @@ def decode_ir_payload_auto(raw: Any) -> DecodedIRPayload:
     except ValueError:
         pass
 
+    try:
+        return DecodedIRPayload(
+            raw_timings=decode_tuya_learn_base64_to_raw(stripped),
+            source_encoding="tuya_learn_base64",
+        )
+    except ValueError:
+        pass
+
     # Final fallback: some Broadlink payloads omit/alter padding.
     try:
         return DecodedIRPayload(
@@ -213,6 +260,13 @@ def transcode_ir_payload(
         return list(decoded.raw_timings)
     if target in {"tuya", "tuya_base64", "ts1201", "ts1201_base64"}:
         return encode_raw_to_tuya_base64(decoded.raw_timings)
+    if target in {
+        "tuya_learn",
+        "tuya_learn_base64",
+        "tuya_fastlz",
+        "tuya_ir_learn",
+    }:
+        return encode_raw_to_tuya_learn_base64(decoded.raw_timings)
     if target in {"broadlink", "broadcom", "base64", "broadlink_base64"}:
         return encode_raw_to_broadlink_base64(decoded.raw_timings)
     raise ValueError(f"Unsupported target encoding: {target_encoding!r}")
@@ -242,6 +296,77 @@ def _looks_like_broadlink_packet(payload: str) -> bool:
         return False
     declared_len = data[2] | (data[3] << 8)
     return declared_len > 0 and (4 + declared_len) <= len(data)
+
+
+def _looks_like_ir_timings(timings: list[int]) -> bool:
+    if len(timings) < 3:
+        return False
+    if timings[0] <= 0:
+        return False
+    if len(timings) > 8192:
+        return False
+    for idx, val in enumerate(timings):
+        if val == 0:
+            return False
+        if idx % 2 == 0 and val < 0:
+            return False
+        if idx % 2 == 1 and val > 0:
+            return False
+        if abs(val) > 200000:
+            return False
+    return True
+
+
+def _tuya_fastlz_decompress(data: bytes) -> bytes:
+    """Decompress Tuya learn stream (FastLZ-compatible framing)."""
+    pos = 0
+    out = bytearray()
+    while pos < len(data):
+        header = data[pos]
+        pos += 1
+        length_code = header >> 5
+        distance_hi = header & 0x1F
+        if length_code == 0:
+            literal_len = distance_hi + 1
+            end = pos + literal_len
+            if end > len(data):
+                raise ValueError("Invalid Tuya learn literal block length")
+            out.extend(data[pos:end])
+            pos = end
+            continue
+
+        if length_code == 7:
+            if pos >= len(data):
+                raise ValueError("Invalid Tuya learn backref extended length")
+            length_code += data[pos]
+            pos += 1
+        copy_len = length_code + 2
+        if pos >= len(data):
+            raise ValueError("Invalid Tuya learn backref distance")
+        distance = ((distance_hi << 8) | data[pos]) + 1
+        pos += 1
+        if distance > len(out):
+            raise ValueError("Invalid Tuya learn backref beyond output window")
+        start = len(out) - distance
+        while copy_len > 0:
+            chunk = out[start : start + copy_len]
+            if not chunk:
+                raise ValueError("Invalid Tuya learn empty backref chunk")
+            out.extend(chunk)
+            copy_len -= len(chunk)
+    return bytes(out)
+
+
+def _tuya_fastlz_compress_literal(data: bytes) -> bytes:
+    """Literal-only FastLZ stream (valid Tuya learn payload)."""
+    out = bytearray()
+    for i in range(0, len(data), 32):
+        chunk = data[i : i + 32]
+        if not chunk:
+            continue
+        out.append(len(chunk) - 1)
+        out.extend(chunk)
+    return bytes(out)
 
 
 def _parse_raw(raw: Any) -> list[int]:
@@ -332,6 +457,8 @@ def resolve_profile_raw(
             LG_CMD_AUTO_CLEAN_ON,
             LG_CMD_ENERGY_SAVING_OFF,
             LG_CMD_ENERGY_SAVING_ON,
+            LG_CMD_IONIZER_OFF,
+            LG_CMD_IONIZER_ON,
             LG_CMD_JET_ON,
             LG_CMD_LIGHT,
             LG_CMD_SWING_OFF,
@@ -352,6 +479,8 @@ def resolve_profile_raw(
             LG_CMD_AUTO_CLEAN_ON,
             LG_CMD_ENERGY_SAVING_OFF,
             LG_CMD_ENERGY_SAVING_ON,
+            LG_CMD_IONIZER_OFF,
+            LG_CMD_IONIZER_ON,
             LG_CMD_JET_ON,
             LG_CMD_LIGHT,
             LG_CMD_SWING_OFF,
@@ -371,6 +500,8 @@ def resolve_profile_raw(
         special_actions: dict[str, tuple[int, str]] = {
             "energy_saving_on": (LG_CMD_ENERGY_SAVING_ON, "energy_saving"),
             "energy_saving_off": (LG_CMD_ENERGY_SAVING_OFF, "energy_saving"),
+            "ionizer_on": (LG_CMD_IONIZER_ON, "ionizer"),
+            "ionizer_off": (LG_CMD_IONIZER_OFF, "ionizer"),
             "jet_on": (LG_CMD_JET_ON, "jet"),
             "wall_swing_on": (LG_CMD_WALL_SWING_ON, "wall_swing"),
             "wall_swing_off": (LG_CMD_WALL_SWING_OFF, "wall_swing"),
