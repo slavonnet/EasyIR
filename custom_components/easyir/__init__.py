@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from functools import partial
 import logging
 import time
 from typing import Any
@@ -38,6 +39,27 @@ from .transports import Ts1201ZhaTransport
 from .transports.base import IrTransport, TransportSendContext
 
 _LOGGER = logging.getLogger(__name__)
+
+
+async def _async_encode_profile_command_for_transport(
+    hass: HomeAssistant,
+    *,
+    profile_path: str,
+    action: str,
+    hvac_mode: str | None,
+    fan_mode: str | None,
+    temperature: int | None,
+):
+    """Run sync profile resolution in executor to keep loop non-blocking."""
+    encode_call = partial(
+        encode_profile_command_for_zha_ts1201,
+        profile_path=profile_path,
+        action=action,
+        hvac_mode=hvac_mode,
+        fan_mode=fan_mode,
+        temperature=temperature,
+    )
+    return await hass.async_add_executor_job(encode_call)
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -173,7 +195,8 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
             )
 
         endpoint_id = _get_merged_value(call, CONF_ENDPOINT_ID) or TS1201_ENDPOINT_ID
-        frame, code = encode_profile_command_for_zha_ts1201(
+        frame, code = await _async_encode_profile_command_for_transport(
+            hass,
             profile_path=profile_path,
             action=call.data["action"],
             hvac_mode=call.data.get("hvac_mode"),
