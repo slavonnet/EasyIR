@@ -105,6 +105,7 @@ delivery_strategy:
     goal: Scale protocols/devices/transports by repeating validated pilot template.
     outputs:
       - Parallel protocol onboarding in small independent PRs.
+      - Reusable agent task brief for protocol slices (docs/protocol-onboarding.task-template.md).
       - Sidebar tools expansion and assistant quality improvements.
 
 workstreams:
@@ -266,7 +267,7 @@ initial_backlog:
     status: В Работе
   - id: protocol-scale-template
     content: Publish reusable protocol onboarding task template for parallel agents.
-    status: В Работе
+    status: Завершена
 
 agent_task_templates:
   protocol_slice:
@@ -434,7 +435,8 @@ agent_prompt_packets:
   packet_sidebar_signal_log:
     branch_name: cursor/ws-sidebar-signal-log-47b4
     workstream_id: ws-sidebar-widgets
-    objective: Deliver first EasyIR sidebar tool: Signal Log (backend-first, minimal UI surface).
+    objective: >-
+      Deliver first EasyIR sidebar tool: Signal Log (backend-first, minimal UI surface).
     depends_on:
       - packet_pilot_protocol_lg_p12rk merged
       - packet_room_log_sync_core merged
