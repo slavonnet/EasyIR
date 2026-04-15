@@ -11,7 +11,7 @@
     "step": {
       "user": {
         "title": "EasyIR",
-        "description": "Выберите устройство ZHA и встроенный профиль (коды идут с EasyIR). Свой путь — по желанию.",
+        "description": "Выберите устройство ZHA (список отфильтрован по модели TS1201). Встроенные профили идут с EasyIR; свой путь — по желанию.%optional_supported",
         "data": {
           "zha_device": "Устройство ZHA",
           "profile_choice": "IR-профиль",
