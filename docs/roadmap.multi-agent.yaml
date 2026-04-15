@@ -306,3 +306,160 @@ agent_task_templates:
     acceptance_criteria:
       - Reproducible inference outcome for test fixtures.
       - No regression in existing assistant API.
+
+first_wave_execution_plan:
+  objective: >
+    Provide immediately executable launch order for orchestrating separate agents
+    with minimal coupling and clean PR history.
+  gate_0_preparation:
+    required_before_any_parallel_run:
+      - Ensure ws-baseline-audit is merged.
+      - Ensure ws-core-codec is merged.
+      - Ensure ws-transport-hub is merged.
+      - Ensure ws-compat-guardrails is merged.
+    outputs:
+      - Stable internal interfaces for protocol and room-aware pipelines.
+      - Migration/compatibility safety net for next PR waves.
+  wave_1a_parallel:
+    description: First parallel implementation wave after foundation gates pass.
+    launch_together:
+      - ws-pilot-protocol
+      - ws-room-log-sync
+      - ws-legal-governance
+    branch_examples:
+      - cursor/ws-pilot-protocol-lg-p12rk-47b4
+      - cursor/ws-room-log-sync-core-47b4
+      - cursor/ws-legal-governance-docs-47b4
+    merge_gate_for_next_wave:
+      - Pilot protocol APIs are stable and tested.
+      - Room-aware event model is merged.
+  wave_1b_parallel:
+    description: Second parallel wave that depends on wave_1a outputs.
+    launch_together:
+      - ws-sidebar-widgets (start from Signal Log only)
+      - ws-assistants (pilot flows only)
+    branch_examples:
+      - cursor/ws-sidebar-signal-log-47b4
+      - cursor/ws-assistants-pilot-47b4
+    merge_gate_for_scale_out:
+      - Sidebar Signal Log tool is usable end-to-end.
+      - Assistant pilot flows produce deterministic, test-backed outcomes.
+  scale_out_rule:
+    description: >
+      Only after wave_1b is stable, run many protocol/model slices in parallel.
+    allowed_parallel_tracks:
+      - Additional protocol+model slices using protocol_slice template.
+      - Additional transport adapters using transport_slice template.
+    required_controls:
+      - One small feature per PR.
+      - No cross-cutting refactors in protocol onboarding PRs.
+
+agent_prompt_packets:
+  usage_note: >
+    Copy one packet into an implementation agent. Keep scope narrow and do not
+    combine packets in one PR. All packets assume this roadmap is source of truth.
+  packet_pilot_protocol_lg_p12rk:
+    branch_name: cursor/ws-pilot-protocol-lg-p12rk-47b4
+    workstream_id: ws-pilot-protocol
+    objective: >
+      Implement first full vertical slice for one AC protocol and one model
+      (LG P12RK or closest existing bundled equivalent).
+    in_scope:
+      - Add protocol descriptor schema artifact for selected pilot protocol.
+      - Implement parser and generator for pilot protocol.
+      - Implement capability map (including optional features such as ionizer flag).
+      - Integrate capability-driven behavior for climate entity/widget path.
+      - Add unit tests for encode/decode/capability mapping roundtrip.
+    out_of_scope:
+      - Support for additional brands/protocols.
+      - Sidebar pages and assistant UX expansion.
+      - Transport refactor beyond required adapter usage.
+    concrete_files_hint:
+      - custom_components/easyir/protocols/*
+      - custom_components/easyir/climate.py
+      - custom_components/easyir/helpers.py
+      - tests/*
+    compatibility_constraints:
+      - Keep easyir.send_raw and easyir.send_profile_command contracts unchanged.
+      - Do not break existing profile path resolution behavior.
+    acceptance_criteria:
+      - Pilot model command generation works for covered actions.
+      - Incoming pilot payload can be decoded to normalized state delta.
+      - Tests pass and demonstrate deterministic mapping.
+  packet_room_log_sync_core:
+    branch_name: cursor/ws-room-log-sync-core-47b4
+    workstream_id: ws-room-log-sync
+    objective: >
+      Add normalized IR event logging and strict room-aware sync policy for inbound decoded signals.
+    in_scope:
+      - Add log storage model for inbound/outbound IR events.
+      - Add room visibility policy checks.
+      - Implement inbound decoded signal -> scoped entity state sync.
+      - Implement suggestion hook for unknown decoded device in visible room.
+      - Add tests for room filter allow/deny behavior.
+    out_of_scope:
+      - Full sidebar UI implementation.
+      - New protocol implementations beyond fixtures/mocks.
+    concrete_files_hint:
+      - custom_components/easyir/signal_log/*
+      - custom_components/easyir/__init__.py
+      - custom_components/easyir/config_flow.py
+      - tests/*
+    compatibility_constraints:
+      - No cross-room state updates.
+      - No behavior regression for existing send-only flows.
+    acceptance_criteria:
+      - Logged events are normalized and room-scoped.
+      - Sync applies only to eligible devices in room scope.
+      - Unknown decoded signals trigger add-device suggestion path only when allowed by room policy.
+  packet_legal_docs_alignment:
+    branch_name: cursor/ws-legal-governance-docs-47b4
+    workstream_id: ws-legal-governance
+    objective: Align legal docs with declared licensing and PR rights transfer policy.
+    in_scope:
+      - Update/create LICENSE statements for attribution and fork policy.
+      - Update/create CONTRIBUTING policy for PR rights transfer and third-party code warranty.
+      - Add PR template section requiring contributor confirmation checkbox.
+    out_of_scope:
+      - Runtime integration behavior changes.
+      - Refactors in Python runtime code.
+    concrete_files_hint:
+      - LICENSE
+      - CONTRIBUTING.md
+      - .github/PULL_REQUEST_TEMPLATE.md
+    compatibility_constraints:
+      - Docs-only PR.
+    acceptance_criteria:
+      - Policy text is explicit and internally consistent across legal docs.
+  packet_sidebar_signal_log:
+    branch_name: cursor/ws-sidebar-signal-log-47b4
+    workstream_id: ws-sidebar-widgets
+    objective: Deliver first EasyIR sidebar tool: Signal Log (backend-first, minimal UI surface).
+    depends_on:
+      - packet_pilot_protocol_lg_p12rk merged
+      - packet_room_log_sync_core merged
+    in_scope:
+      - Add backend API endpoints for reading room-scoped signal log.
+      - Add initial sidebar section and Signal Log tool entry.
+      - Add tests for API filtering and pagination basics.
+    out_of_scope:
+      - Transcoder page and assistants page.
+      - Broad dashboard redesign.
+    acceptance_criteria:
+      - Signal Log tool works for pilot scenario and respects room scope.
+  packet_assistants_pilot:
+    branch_name: cursor/ws-assistants-pilot-47b4
+    workstream_id: ws-assistants
+    objective: Deliver pilot assistant flows (with remote and without remote) on top of pilot protocol.
+    depends_on:
+      - packet_pilot_protocol_lg_p12rk merged
+      - packet_room_log_sync_core merged
+    in_scope:
+      - Remote capture -> decode -> infer capability flow for pilot protocol.
+      - Guided pairing (no remote) with candidate send + user feedback scoring.
+      - Deterministic confidence scoring and test fixtures.
+    out_of_scope:
+      - Multi-protocol universal inference.
+      - Sidebar polish beyond minimal API hooks.
+    acceptance_criteria:
+      - Both assistant flows complete for pilot with test-backed deterministic outcomes.
