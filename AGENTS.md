@@ -212,6 +212,7 @@ These rules are mandatory for both directly started agents and agents started by
    - rationale for new/adjusted tasks,
    - roadmap updates,
    - related documentation updates so a new agent can execute directly from updated roadmap.
+6. If a PR for a branch is already **merged**, orchestrator must **not** attempt to update that merged PR; any additional changes must go in a **new branch and new PR**.
 
 ### 13.3 Roadmap status workflow
 
