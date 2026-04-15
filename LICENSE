@@ -1,0 +1,57 @@
+MIT License
+
+Copyright (c) Badalyan Vyacheslav and the EasyIR contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+Additional project policies (EasyIR)
+
+These terms apply in addition to the MIT license above and are intended to
+clarify community expectations. If any provision below conflicts with mandatory
+applicable law, the law governs to the minimum extent required.
+
+1) Attribution for reuse
+
+   If you copy, adapt, or redistribute material from this repository (code,
+   documentation, or other creative content), you must provide clear, prominent
+   attribution that names:
+
+   - the original author (Badalyan Vyacheslav), and
+   - the project name ("EasyIR").
+
+   Attribution should be placed where a reasonable recipient will see it
+   (for example: LICENSE or NOTICE file, package metadata, or documentation
+   credits).
+
+2) Forking under a new project name
+
+   You may fork this repository under the terms of the MIT license. Publishing
+   a fork under a **new name** (a name other than "EasyIR" or a good-faith
+   variant clearly derived from it, such as a personal fork prefix) is allowed
+   **only if** the upstream EasyIR repository (this project’s default branch on
+   the canonical upstream you forked from) had **no new commits** for at least
+   **365 consecutive days** immediately before you first publish the renamed
+   fork.
+
+   If the upstream repository remains actively maintained, forks that intend to
+   compete as a separately branded project must coordinate with maintainers or
+   keep naming aligned with normal open-source fork conventions (for example,
+   retaining upstream identity in documentation and credits).
