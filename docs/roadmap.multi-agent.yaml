@@ -269,7 +269,7 @@ initial_backlog:
     status: В Работе
   - id: room-aware-log-sync
     content: Implement room-aware logging, incoming decode mapping, and scoped sync.
-    status: В Работе
+    status: Завершена
   - id: sidebar-signal-log
     content: Deliver first EasyIR sidebar tool page (Signal Log) with backend API.
     status: pending

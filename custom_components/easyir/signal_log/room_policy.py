@@ -46,7 +46,16 @@ def entity_visible_for_ir_event(
     Blocks cross-room updates: when the event carries a room, the entity must
     report the same area. Hub room allow-lists further restrict which entities
     belong to the hub scope.
+
+    When the hub uses a non-empty room allow-list, the inbound event must carry
+    a room that is both known and allowed for that hub. Otherwise no entity is
+    eligible (avoids applying IR decoded in an unknown room to devices that only
+    happen to lie in an allowed area).
     """
+    if hub_restricts_rooms(hub_visible_room_ids):
+        assert hub_visible_room_ids is not None
+        if event_room_id is None or event_room_id not in hub_visible_room_ids:
+            return False
     if not entity_allowed_by_hub_rooms(entity_area_id, hub_visible_room_ids):
         return False
     return is_same_room(event_room_id, entity_area_id)
