@@ -4,6 +4,8 @@ Author: Badalyan Vyacheslav
 
 Custom Home Assistant integration to send IR profile commands via Tuya TS1201 over ZHA.
 
+**License and contributing:** see [`LICENSE`](LICENSE) and [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
 ## Features
 
 - Creates climate entity in Home Assistant (`climate.easyir_ac`).
