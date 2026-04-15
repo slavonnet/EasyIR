@@ -23,7 +23,6 @@ For clarity, this grant includes the rights needed for maintainers to incorporat
 your contribution into the project and to exercise those rights on behalf of the
 project under the then-current project license, consistent with typical open-source
 collaboration.
-
 You represent and warrant that you have sufficient rights to grant the license
 above for everything you submit in the pull request.
 
