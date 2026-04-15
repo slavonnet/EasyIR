@@ -22,19 +22,15 @@ from .const import (
     PLATFORMS,
     SERVICE_SEND_RAW,
     SERVICE_SEND_COMMAND,
-    TS1201_CLUSTER_ID,
-    TS1201_CLUSTER_TYPE,
-    TS1201_COMMAND_ID,
-    TS1201_COMMAND_TYPE,
     TS1201_ENDPOINT_ID,
-    ZHA_DOMAIN,
-    ZHA_SERVICE,
 )
 from .ir_core.service_adapter import (
     encode_profile_command_for_zha_ts1201,
     encode_raw_timings_for_zha_ts1201,
 )
 from .signal_log.ha_bridge import async_setup_inbound_listener, log_outbound_send
+from .transports import Ts1201ZhaTransport
+from .transports.base import IrTransport, TransportSendContext
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -70,34 +66,11 @@ SEND_COMMAND_SCHEMA = vol.Schema(
 )
 
 
-async def _send_tuya_ir(
-    hass: HomeAssistant,
-    ieee: str,
-    code: str,
-    endpoint_id: int,
-) -> None:
-    """Proxy send to zha.issue_zigbee_cluster_command."""
-    payload: dict[str, Any] = {
-        "ieee": ieee,
-        "endpoint_id": endpoint_id,
-        "cluster_id": TS1201_CLUSTER_ID,
-        "cluster_type": TS1201_CLUSTER_TYPE,
-        "command": TS1201_COMMAND_ID,
-        "command_type": TS1201_COMMAND_TYPE,
-        "params": {"code": code},
-    }
-    await hass.services.async_call(
-        ZHA_DOMAIN,
-        ZHA_SERVICE,
-        payload,
-        blocking=True,
-    )
-
-
 async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     """Set up services for the integration."""
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN].setdefault("climate_entities", {})
+    hass.data[DOMAIN].setdefault("ir_transport", Ts1201ZhaTransport())
     async_setup_inbound_listener(hass)
     send_lock_by_ieee: dict[str, asyncio.Lock] = {}
     last_send_by_ieee: dict[str, float] = {}
@@ -134,7 +107,12 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         frame, code = encode_raw_timings_for_zha_ts1201(raw_timings)
         _LOGGER.debug("Generated Tuya code for %s: %s", ieee, code)
         await _apply_rate_limit(ieee)
-        await _send_tuya_ir(hass, ieee, code, endpoint_id)
+        transport: IrTransport = hass.data[DOMAIN]["ir_transport"]
+        await transport.send(
+            hass,
+            code,
+            TransportSendContext(ieee=ieee, endpoint_id=endpoint_id),
+        )
         entry_data = _entry_data_for_ieee(hass, ieee) or {}
         log_outbound_send(
             hass,
@@ -170,7 +148,12 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
             call.data["action"],
         )
         await _apply_rate_limit(ieee)
-        await _send_tuya_ir(hass, ieee, code, endpoint_id)
+        transport: IrTransport = hass.data[DOMAIN]["ir_transport"]
+        await transport.send(
+            hass,
+            code,
+            TransportSendContext(ieee=ieee, endpoint_id=endpoint_id),
+        )
         entry_data = _entry_data_for_ieee(hass, ieee) or {}
         log_outbound_send(
             hass,
@@ -201,6 +184,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up EasyIR from a config entry."""
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN].setdefault("climate_entities", {})
+    hass.data[DOMAIN].setdefault("ir_transport", Ts1201ZhaTransport())
     hass.data[DOMAIN][entry.entry_id] = entry.data
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True

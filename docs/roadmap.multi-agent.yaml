@@ -260,7 +260,7 @@ initial_backlog:
     status: Завершена
   - id: transport-abstraction
     content: Introduce transport interface, migrate TS1201 adapter, add supported hub discovery filters.
-    status: pending
+    status: Завершена
   - id: compat-migrations-tests
     content: Add migration guardrails and upgrade regression suite.
     status: pending

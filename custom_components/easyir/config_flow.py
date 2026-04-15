@@ -23,6 +23,7 @@ from .const import (
     DEFAULT_ENDPOINT_ID,
     DOMAIN,
 )
+from .supported_hubs import list_onboarding_hub_choices
 
 CONF_ZHA_DEVICE = "zha_device"
 ZHA_DOMAIN = "zha"
@@ -96,7 +97,15 @@ class EasyIrConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         data_schema = vol.Schema(
             {
                 vol.Required(CONF_ZHA_DEVICE): selector.DeviceSelector(
-                    selector.DeviceSelectorConfig(integration=ZHA_DOMAIN)
+                    selector.DeviceSelectorConfig(
+                        integration=ZHA_DOMAIN,
+                        filter=[
+                            {
+                                "integration": ZHA_DOMAIN,
+                                "model": "TS1201",
+                            }
+                        ],
+                    )
                 ),
                 vol.Required(CONF_PROFILE_CHOICE, default=default_profile): selector.SelectSelector(
                     selector.SelectSelectorConfig(
@@ -121,8 +130,21 @@ class EasyIrConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             }
         )
 
+        description_placeholders: dict[str, str] = {}
+        supported = list_onboarding_hub_choices(self.hass)
+        if supported:
+            lines = "\n".join(f"- {label}" for _, label in supported[:8])
+            if len(supported) > 8:
+                lines += "\n- …"
+            description_placeholders["optional_supported"] = (
+                "\n\nSupported TS1201 hubs detected (not yet in EasyIR):\n" + lines
+            )
+        else:
+            description_placeholders["optional_supported"] = ""
+
         return self.async_show_form(
             step_id="user",
             data_schema=data_schema,
             errors=errors,
+            description_placeholders=description_placeholders,
         )
