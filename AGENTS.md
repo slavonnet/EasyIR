@@ -229,3 +229,8 @@ These rules are mandatory for both directly started agents and agents started by
 2. Each subagent must make changes only in its own branch and within assigned scope.
 3. Subagent must not modify files/areas owned by another in-progress parallel task.
 4. If overlap/conflict is discovered, subagent must stop cross-scope edits and report to orchestrator.
+5. Orchestrator-launched subagents **must use isolated workspace/worktree directories** (one filesystem workspace per subagent branch), not a shared working directory.
+6. Running multiple subagents in the same physical workspace path is prohibited, even if branch names differ.
+7. Orchestrator prompt must explicitly state the assigned workspace path for each subagent and require no writes outside that path.
+8. Before any commit/push, subagent must verify `git branch --show-current` matches assigned branch and repository path matches assigned workspace.
+9. If subagent detects unexpected files changed by another task in its workspace, it must stop and report conflict instead of trying to repair/revert others' changes.
