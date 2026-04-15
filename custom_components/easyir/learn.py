@@ -9,6 +9,7 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 
+from .command_pool import async_call_pooled_service
 from .const import (
     CONF_IEEE,
     DEFAULT_ENDPOINT_ID,
@@ -71,10 +72,12 @@ def _entry_endpoint_id(entry_data: dict[str, Any] | None) -> int:
 
 
 async def _issue_irlearn(hass: HomeAssistant, ieee: str, endpoint_id: int, on: bool) -> None:
-    await hass.services.async_call(
-        ZHA_DOMAIN,
-        ZHA_SERVICE,
-        {
+    await async_call_pooled_service(
+        hass,
+        ieee=ieee,
+        domain=ZHA_DOMAIN,
+        service=ZHA_SERVICE,
+        data={
             "ieee": ieee,
             "endpoint_id": endpoint_id,
             "cluster_id": TS1201_CLUSTER_ID,
@@ -83,22 +86,23 @@ async def _issue_irlearn(hass: HomeAssistant, ieee: str, endpoint_id: int, on: b
             "command_type": TS1201_COMMAND_TYPE,
             "params": {"on_off": bool(on)},
         },
-        blocking=True,
+        return_response=False,
     )
 
 
 async def _read_last_learned(hass: HomeAssistant, ieee: str, endpoint_id: int) -> str | None:
-    result = await hass.services.async_call(
-        ZHA_DOMAIN,
-        "read_zigbee_cluster_attributes",
-        {
+    result = await async_call_pooled_service(
+        hass,
+        ieee=ieee,
+        domain=ZHA_DOMAIN,
+        service="read_zigbee_cluster_attributes",
+        data={
             "ieee": ieee,
             "endpoint_id": endpoint_id,
             "cluster_id": TS1201_CLUSTER_ID,
             "cluster_type": TS1201_CLUSTER_TYPE,
             "attribute": [TS1201_LAST_LEARNED_ATTR_ID],
         },
-        blocking=True,
         return_response=True,
     )
     if not isinstance(result, dict):
@@ -266,10 +270,12 @@ async def async_read_learned_ir_code(
         raise ValueError(f"Unsupported learn vendor profile: {vendor_profile}")
     entry_data = _entry_for_ieee(hass, ieee)
     endpoint_id = _entry_endpoint_id(entry_data)
-    result = await hass.services.async_call(
-        ZHA_DOMAIN,
-        ZHA_SERVICE,
-        {
+    result = await async_call_pooled_service(
+        hass,
+        ieee=ieee,
+        domain=ZHA_DOMAIN,
+        service=ZHA_SERVICE,
+        data={
             "ieee": ieee,
             "endpoint_id": endpoint_id,
             "cluster_id": TS1201_CLUSTER_ID,
@@ -278,7 +284,6 @@ async def async_read_learned_ir_code(
             "command_type": TS1201_COMMAND_TYPE,
             "params": {"attributes": [IR_LEARN_ATTRIBUTE_ID]},
         },
-        blocking=True,
         return_response=True,
     )
     code = _extract_learn_attr_code(result)

@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import asyncio
 from functools import partial
 import logging
-import time
 from typing import Any
 
 import voluptuous as vol
@@ -19,7 +17,6 @@ from .const import (
     CONF_IEEE,
     CONF_PROFILE_PATH,
     DEFAULT_ENDPOINT_ID,
-    DEFAULT_SEND_DELAY_MS,
     DOMAIN,
     PLATFORMS,
     SERVICE_SEND_RAW,
@@ -27,6 +24,7 @@ from .const import (
     SERVICE_LEARN_ONCE,
     TS1201_ENDPOINT_ID,
 )
+from .command_pool import DEFAULT_POOL_INTERVAL_S, get_service_call_pool
 from .ir_core.service_adapter import (
     encode_profile_command_for_zha_ts1201,
     encode_raw_timings_for_zha_ts1201,
@@ -127,13 +125,13 @@ LEARN_ONCE_SCHEMA = vol.Schema(
 
 async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     """Set up services for the integration."""
-    hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN].setdefault("climate_entities", {})
-    hass.data[DOMAIN].setdefault("ir_transport", Ts1201ZhaTransport())
+    root = hass.data.setdefault(DOMAIN, {})
+    root.setdefault("climate_entities", {})
+    root.setdefault("ir_transport", Ts1201ZhaTransport())
+    root.setdefault("service_call_pool_interval_s", DEFAULT_POOL_INTERVAL_S)
+    get_service_call_pool(hass)
     async_setup_inbound_listener(hass)
     async_register_signal_log_api(hass)
-    send_lock_by_ieee: dict[str, asyncio.Lock] = {}
-    last_send_by_ieee: dict[str, float] = {}
 
     def _default_data() -> dict[str, Any]:
         entries = hass.config_entries.async_entries(DOMAIN)
@@ -146,17 +144,6 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
             return call.data[key]
         return _default_data().get(key)
 
-    async def _apply_rate_limit(ieee: str) -> None:
-        lock = send_lock_by_ieee.setdefault(ieee, asyncio.Lock())
-        async with lock:
-            now = time.monotonic()
-            delay_s = DEFAULT_SEND_DELAY_MS / 1000.0
-            last_send = last_send_by_ieee.get(ieee, 0.0)
-            wait_s = delay_s - (now - last_send)
-            if wait_s > 0:
-                await asyncio.sleep(wait_s)
-            last_send_by_ieee[ieee] = time.monotonic()
-
     async def handle_send_raw(call: ServiceCall) -> None:
         ieee = _get_merged_value(call, CONF_IEEE)
         if not ieee:
@@ -166,7 +153,6 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         raw_timings = call.data["raw_timings"]
         frame, code = encode_raw_timings_for_zha_ts1201(raw_timings)
         _LOGGER.debug("Generated Tuya code for %s: %s", ieee, code)
-        await _apply_rate_limit(ieee)
         transport: IrTransport = hass.data[DOMAIN]["ir_transport"]
         await transport.send(
             hass,
@@ -208,7 +194,6 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
             ieee,
             call.data["action"],
         )
-        await _apply_rate_limit(ieee)
         transport: IrTransport = hass.data[DOMAIN]["ir_transport"]
         await transport.send(
             hass,
