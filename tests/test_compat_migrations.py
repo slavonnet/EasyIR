@@ -63,8 +63,6 @@ class TestAsyncMigrateEntry(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         self.hass = HomeAssistant("/tmp/easyir_migration_test")
         self.hass.config_entries = ConfigEntries(self.hass, {})
-        # HA 2025+: async_add runs full integration setup; minimal hass lacks loader state.
-        self.hass.config_entries.async_setup = AsyncMock(return_value=True)  # type: ignore[method-assign]
         self._integration = MagicMock()
         self._integration.domain = DOMAIN
         self._integration.async_get_component = AsyncMock(return_value=easyir_pkg)
@@ -77,7 +75,7 @@ class TestAsyncMigrateEntry(unittest.IsolatedAsyncioTestCase):
         data = {"ieee": "aa:bb:cc:dd:ee:ff", "profile_path": path, "endpoint_id": 2}
         entry = _make_entry(version=1, data=data.copy())
         object.__setattr__(entry, "_integration_for_domain", self._integration)
-        await self.hass.config_entries.async_add(entry)
+        self.hass.config_entries._entries[entry.entry_id] = entry  # noqa: SLF001
 
         ok = await easyir_pkg.async_migrate_entry(self.hass, entry)
         self.assertTrue(ok)
@@ -91,7 +89,7 @@ class TestAsyncMigrateEntry(unittest.IsolatedAsyncioTestCase):
             data={"ieee": "aa:bb:cc:dd:ee:ff", "profile_path": path},
         )
         object.__setattr__(entry, "_integration_for_domain", self._integration)
-        await self.hass.config_entries.async_add(entry)
+        self.hass.config_entries._entries[entry.entry_id] = entry  # noqa: SLF001
 
         ok = await easyir_pkg.async_migrate_entry(self.hass, entry)
         self.assertTrue(ok)
@@ -119,7 +117,7 @@ class TestAsyncMigrateEntry(unittest.IsolatedAsyncioTestCase):
             data={"ieee": "aa:bb:cc:dd:ee:ff", "profile_path": path},
         )
         object.__setattr__(entry, "_integration_for_domain", self._integration)
-        await self.hass.config_entries.async_add(entry)
+        self.hass.config_entries._entries[entry.entry_id] = entry  # noqa: SLF001
 
         ok = await entry.async_migrate(self.hass)
         self.assertTrue(ok)

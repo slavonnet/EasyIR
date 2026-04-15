@@ -43,7 +43,8 @@ def _ieee_from_zha_device(device: dr.DeviceEntry) -> str | None:
 class EasyIrConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for EasyIR."""
 
-    VERSION = 1
+    # Bump when stored config shape changes; pair with async_migrate_entry in __init__.py.
+    VERSION = 2
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
