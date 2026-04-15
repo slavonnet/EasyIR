@@ -64,18 +64,28 @@ class IrEventLog:
         room_id: str | None = None,
         direction: IrEventDirection | None = None,
         limit: int = 100,
+        offset: int = 0,
     ) -> Iterator[IrEvent]:
-        """Yield newest-first events optionally filtered by room and direction."""
+        """Yield newest-first events optionally filtered by room and direction.
+
+        Pagination is offset-based in newest-first order: skip the first ``offset``
+        matching rows, then yield at most ``limit`` rows.
+        """
         cap = max(0, int(limit))
-        count = 0
+        skip = max(0, int(offset))
+        yielded = 0
+        skipped = 0
         for ev in reversed(self._events):
             if room_id is not None and ev.room_id != room_id:
                 continue
             if direction is not None and ev.direction != direction:
                 continue
+            if skipped < skip:
+                skipped += 1
+                continue
             yield ev
-            count += 1
-            if count >= cap:
+            yielded += 1
+            if yielded >= cap:
                 break
 
 
