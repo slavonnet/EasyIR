@@ -1,0 +1,127 @@
+"""Tests for EasyIR one-shot IR learn flow."""
+
+from __future__ import annotations
+
+import unittest
+from unittest.mock import AsyncMock, patch
+
+from custom_components.easyir import learn as learn_module
+from custom_components.easyir.const import (
+    TS1201_CLUSTER_ID,
+    TS1201_IRLEARN_COMMAND_ID,
+    ZHA_DOMAIN,
+    ZHA_SERVICE,
+)
+
+
+class _FakeServices:
+    def __init__(self, calls: list, responses: list | None = None) -> None:
+        self._calls = calls
+        self._responses = list(responses or [])
+
+    async def async_call(
+        self,
+        domain: str,
+        service: str,
+        data: dict,
+        blocking: bool = True,
+        return_response: bool = False,
+    ):
+        self._calls.append(
+            {
+                "domain": domain,
+                "service": service,
+                "data": dict(data),
+                "blocking": blocking,
+                "return_response": return_response,
+            }
+        )
+        if self._responses:
+            return self._responses.pop(0)
+        return {}
+
+
+class _FakeHass:
+    def __init__(self, responses: list | None = None) -> None:
+        self._calls: list[dict] = []
+        self.services = _FakeServices(self._calls, responses=responses)
+        self.data = {}
+        self.config_entries = type(
+            "Cfg",
+            (),
+            {
+                "async_entries": (
+                    lambda _self, _domain: [
+                        type("Entry", (), {"data": {"ieee": "aa:bb:cc", "endpoint_id": 1}})()
+                    ]
+                )
+            },
+        )()
+
+    @property
+    def calls(self) -> list[dict]:
+        return self._calls
+
+
+class TestLearnFlow(unittest.IsolatedAsyncioTestCase):
+    async def test_learn_once_ts1201_returns_code_and_disables_learning(self) -> None:
+        hass = _FakeHass(
+            responses=[
+                {},  # enable learn
+                {"success": {0: "QWxhZGRpbjpvcGVuIHNlc2FtZQ=="}},  # read attribute
+                {},  # disable learn
+            ]
+        )
+        code = await learn_module.learn_once_ts1201(
+            hass,
+            ieee="aa:bb:cc",
+            endpoint_id=1,
+            timeout_s=1.0,
+            poll_interval_s=0.01,
+        )
+        self.assertEqual(code, "QWxhZGRpbjpvcGVuIHNlc2FtZQ==")
+        self.assertEqual(len(hass.calls), 3)
+        start_call = hass.calls[0]
+        self.assertEqual(start_call["domain"], ZHA_DOMAIN)
+        self.assertEqual(start_call["service"], ZHA_SERVICE)
+        self.assertEqual(start_call["data"]["cluster_id"], TS1201_CLUSTER_ID)
+        self.assertEqual(start_call["data"]["command"], TS1201_IRLEARN_COMMAND_ID)
+        self.assertEqual(start_call["data"]["params"], {"on_off": True})
+        stop_call = hass.calls[2]
+        self.assertEqual(stop_call["data"]["params"], {"on_off": False})
+
+    async def test_learn_once_disables_mode_on_timeout(self) -> None:
+        hass = _FakeHass(responses=[{}, {"success": {}}, {"success": {}}, {}])
+        with self.assertRaises(TimeoutError):
+            await learn_module.learn_once_ts1201(
+                hass,
+                ieee="aa:bb:cc",
+                endpoint_id=1,
+                timeout_s=0.02,
+                poll_interval_s=0.01,
+            )
+        self.assertGreaterEqual(len(hass.calls), 3)
+        self.assertEqual(hass.calls[0]["data"]["params"], {"on_off": True})
+        self.assertEqual(hass.calls[-1]["data"]["params"], {"on_off": False})
+
+    async def test_learn_once_dispatch_uses_ts1201_profile(self) -> None:
+        hass = _FakeHass(
+            responses=[
+                {},
+                {"success": {0: "ABC"}},
+                {},
+            ]
+        )
+        payload = await learn_module.learn_once(
+            hass,
+            ieee="aa:bb:cc",
+            endpoint_id=1,
+            timeout_s=5,
+            poll_interval_s=0.01,
+        )
+        self.assertEqual(payload["code"], "ABC")
+        self.assertEqual(payload["vendor_profile"], learn_module.VENDOR_PROFILE_TS1201_ZOSUNG)
+
+
+if __name__ == "__main__":
+    unittest.main()
