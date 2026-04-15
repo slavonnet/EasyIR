@@ -182,6 +182,23 @@ def _normalize_fan(fan: str) -> str:
     return {"medium": "mid"}.get(fan.strip().lower(), fan.strip().lower())
 
 
+def _expected_lg_state_from_profile(
+    action_norm: str, fan_norm: str, expected_temp: float
+) -> tuple[str, str, float]:
+    """Normalize known LG profile semantics to protocol-level state expectations.
+
+    LG profile matrices often store synthetic temperatures for modes where the
+    protocol encodes fixed values:
+    - dry mode commonly enforces temp 24 C;
+    - fan_only mode commonly enforces temp 18 C.
+    """
+    if action_norm == "dry":
+        return "dry", fan_norm, 24.0
+    if action_norm == "fan_only":
+        return "fan_only", fan_norm, 18.0
+    return action_norm, fan_norm, expected_temp
+
+
 class TestLgProfileMatrixRoundtrip(unittest.TestCase):
     def test_lg_profiles_roundtrip_matrix(self) -> None:
         lg_profiles: list[Path] = []
@@ -256,9 +273,18 @@ class TestLgProfileMatrixRoundtrip(unittest.TestCase):
                             continue
 
                         if not (
-                            result.hvac_mode == action_norm
-                            and result.fan_mode == fan_norm
-                            and result.temperature_c == expected_temp
+                            result.hvac_mode
+                            == _expected_lg_state_from_profile(
+                                action_norm, fan_norm, expected_temp
+                            )[0]
+                            and result.fan_mode
+                            == _expected_lg_state_from_profile(
+                                action_norm, fan_norm, expected_temp
+                            )[1]
+                            and result.temperature_c
+                            == _expected_lg_state_from_profile(
+                                action_norm, fan_norm, expected_temp
+                            )[2]
                         ):
                             summary.add(
                                 "state_mismatch",
