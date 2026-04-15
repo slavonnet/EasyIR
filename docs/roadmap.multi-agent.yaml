@@ -263,7 +263,7 @@ initial_backlog:
     status: Завершена
   - id: compat-migrations-tests
     content: Add migration guardrails and upgrade regression suite.
-    status: В Работе
+    status: Завершена
   - id: pilot-ac-vertical-slice
     content: Implement one AC protocol and one model end-to-end with capability-driven behavior.
     status: В Работе
