@@ -78,9 +78,11 @@ def default_codec_registry() -> CodecRegistry:
     from .codec_broadlink import BroadlinkBase64Encoder
     from .codec_raw_timings import RawTimingsCodec
     from .codec_ts1201_zha import Ts1201ZhaBase64Encoder
+    from .codec_tuya_learn import TuyaLearnBase64Encoder
 
     reg = CodecRegistry()
     reg.register_codec(RawTimingsCodec())
     reg.register_transport_encoder(Ts1201ZhaBase64Encoder())
+    reg.register_transport_encoder(TuyaLearnBase64Encoder())
     reg.register_transport_encoder(BroadlinkBase64Encoder())
     return reg
