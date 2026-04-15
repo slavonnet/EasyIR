@@ -11,7 +11,7 @@ from homeassistant.components.climate.const import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfTemperature
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -98,6 +98,36 @@ class EasyIrClimate(ClimateEntity):
             "easyir_pilot": True,
             "easyir_ionizer_supported": bool(view.get("ionizer_supported")),
         }
+
+    async def async_added_to_hass(self) -> None:
+        """Register for inbound decoded IR sync."""
+        await super().async_added_to_hass()
+        self.hass.data.setdefault(DOMAIN, {}).setdefault("climate_entities", {})[
+            self.entity_id
+        ] = self
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Unregister entity reference for inbound sync."""
+        await super().async_will_remove_from_hass()
+        entities = self.hass.data.get(DOMAIN, {}).get("climate_entities", {})
+        entities.pop(self.entity_id, None)
+
+    @callback
+    def async_handle_easyir_inbound_decoded(self, decoded: dict[str, Any]) -> None:
+        """Apply decoded inbound IR state when room policy allows (no ZHA send)."""
+        if (hvac := decoded.get("hvac_mode")) is not None:
+            try:
+                self._attr_hvac_mode = HVACMode(str(hvac))
+            except ValueError:
+                pass
+        if (fan := decoded.get("fan_mode")) is not None:
+            self._attr_fan_mode = str(fan)
+        if (temp := decoded.get("temperature")) is not None:
+            try:
+                self._attr_target_temperature = float(temp)
+            except (TypeError, ValueError):
+                pass
+        self.async_write_ha_state()
 
     async def _send(self, data: dict[str, Any]) -> None:
         """Send command via integration service."""

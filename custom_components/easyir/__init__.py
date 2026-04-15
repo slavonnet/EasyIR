@@ -31,8 +31,19 @@ from .const import (
     ZHA_SERVICE,
 )
 from .helpers import encode_raw_to_tuya_base64, resolve_profile_raw
+from .signal_log.ha_bridge import async_setup_inbound_listener, log_outbound_send
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _entry_data_for_ieee(hass: HomeAssistant, ieee: str) -> dict[str, Any] | None:
+    """Return merged config entry data for the EasyIR entry matching ieee."""
+    norm = ieee.lower().replace(" ", "")
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        e = str(entry.data.get(CONF_IEEE, "")).lower().replace(" ", "")
+        if e == norm:
+            return dict(entry.data)
+    return None
 
 
 SEND_RAW_SCHEMA = vol.Schema(
@@ -83,6 +94,8 @@ async def _send_tuya_ir(
 async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     """Set up services for the integration."""
     hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN].setdefault("climate_entities", {})
+    async_setup_inbound_listener(hass)
     send_lock_by_ieee: dict[str, asyncio.Lock] = {}
     last_send_by_ieee: dict[str, float] = {}
 
@@ -119,6 +132,15 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         _LOGGER.debug("Generated Tuya code for %s: %s", ieee, code)
         await _apply_rate_limit(ieee)
         await _send_tuya_ir(hass, ieee, code, endpoint_id)
+        entry_data = _entry_data_for_ieee(hass, ieee) or {}
+        log_outbound_send(
+            hass,
+            ieee=ieee,
+            timings=raw_timings,
+            entity_id=None,
+            entry_data=entry_data,
+            protocol_hint="raw_timings",
+        )
 
     async def handle_send_command(call: ServiceCall) -> None:
         ieee = _get_merged_value(call, CONF_IEEE)
@@ -147,6 +169,15 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         )
         await _apply_rate_limit(ieee)
         await _send_tuya_ir(hass, ieee, code, endpoint_id)
+        entry_data = _entry_data_for_ieee(hass, ieee) or {}
+        log_outbound_send(
+            hass,
+            ieee=ieee,
+            timings=raw_timings,
+            entity_id=None,
+            entry_data=entry_data,
+            protocol_hint="profile",
+        )
 
     hass.services.async_register(
         DOMAIN,
@@ -167,6 +198,7 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up EasyIR from a config entry."""
     hass.data.setdefault(DOMAIN, {})
+    hass.data[DOMAIN].setdefault("climate_entities", {})
     hass.data[DOMAIN][entry.entry_id] = entry.data
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
