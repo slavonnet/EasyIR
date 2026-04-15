@@ -214,6 +214,36 @@ def _expected_lg_state_from_profile(
     return action_norm, fan_norm, expected_temp
 
 
+def _normalized_feature_flags(
+    feature_flags: dict[str, Any], *, include_command_word: bool
+) -> dict[str, Any]:
+    normalized: dict[str, Any] = {}
+    for key in sorted(feature_flags.keys()):
+        if key == "command_word" and not include_command_word:
+            continue
+        normalized[str(key)] = feature_flags[key]
+    return normalized
+
+
+def _decoded_view(
+    result: Any,
+    *,
+    include_command_word: bool = False,
+) -> dict[str, Any]:
+    return {
+        "power_on": bool(result.power_on),
+        "is_off_command": bool(result.is_off_command),
+        "hvac_mode": result.hvac_mode,
+        "fan_mode": result.fan_mode,
+        "temperature_c": result.temperature_c,
+        "checksum_valid": bool(result.checksum_valid),
+        "signature_ok": bool(result.signature_ok),
+        "feature_flags": _normalized_feature_flags(
+            result.feature_flags, include_command_word=include_command_word
+        ),
+    }
+
+
 class TestLgProfileMatrixRoundtrip(unittest.TestCase):
     def test_lg_profiles_roundtrip_matrix(self) -> None:
         lg_profiles: list[Path] = []
@@ -294,25 +324,36 @@ class TestLgProfileMatrixRoundtrip(unittest.TestCase):
                             )
                             continue
 
-                        if not (
-                            result.hvac_mode
-                            == _expected_lg_state_from_profile(
+                        expected_mode, expected_fan, expected_temp_norm = (
+                            _expected_lg_state_from_profile(
                                 action_norm, fan_norm, expected_temp
-                            )[0]
-                            and result.fan_mode
-                            == _expected_lg_state_from_profile(
-                                action_norm, fan_norm, expected_temp
-                            )[1]
-                            and result.temperature_c
-                            == _expected_lg_state_from_profile(
-                                action_norm, fan_norm, expected_temp
-                            )[2]
-                        ):
+                            )
+                        )
+                        canonical = encode_lg_ac_frame_universal(
+                            power_on=True,
+                            hvac_mode=expected_mode,
+                            temperature_c=int(expected_temp_norm),
+                            fan_mode=expected_fan,
+                        )
+                        expected_decoded = decode_lg_ac_strict(canonical)
+                        expected_view = _decoded_view(
+                            expected_decoded, include_command_word=False
+                        )
+                        actual_view = _decoded_view(result, include_command_word=False)
+
+                        if actual_view != expected_view:
+                            expected_view_full = _decoded_view(
+                                expected_decoded, include_command_word=True
+                            )
+                            actual_view_full = _decoded_view(
+                                result, include_command_word=True
+                            )
                             summary.add(
                                 "state_mismatch",
                                 (
                                     f"{path.name}:{action_norm}:{fan_norm}:{expected_temp}"
-                                    f"->decoded({result.hvac_mode},{result.fan_mode},{result.temperature_c})"
+                                    f":expected={json.dumps(expected_view_full, ensure_ascii=False, sort_keys=True)}"
+                                    f":actual={json.dumps(actual_view_full, ensure_ascii=False, sort_keys=True)}"
                                 ),
                             )
                             for model in models:
@@ -321,12 +362,6 @@ class TestLgProfileMatrixRoundtrip(unittest.TestCase):
                             summary.state_mismatch_by_profile[path.name] += 1
                             continue
 
-                        canonical = encode_lg_ac_frame_universal(
-                            power_on=True,
-                            hvac_mode=result.hvac_mode,
-                            temperature_c=int(result.temperature_c or 24),
-                            fan_mode=result.fan_mode,
-                        )
                         if (canonical & 0x0FFFFFFF) == (code & 0x0FFFFFFF):
                             summary.add(
                                 "exact_match",
@@ -351,6 +386,8 @@ class TestLgProfileMatrixRoundtrip(unittest.TestCase):
                                 (
                                     f"{path.name}:{action_norm}:{fan_norm}:{temp_key}"
                                     f":code={code:#x}:canonical={canonical:#x}"
+                                    f":expected={json.dumps(_decoded_view(expected_decoded, include_command_word=True), ensure_ascii=False, sort_keys=True)}"
+                                    f":actual={json.dumps(_decoded_view(result, include_command_word=True), ensure_ascii=False, sort_keys=True)}"
                                 ),
                             )
 
