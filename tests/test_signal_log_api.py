@@ -7,6 +7,7 @@ import json
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 from aiohttp.test_utils import make_mocked_request
 
@@ -185,6 +186,44 @@ class TestSignalLogQueryParsing(unittest.IsolatedAsyncioTestCase):
         view = api.EasyIrSignalLogEventsView()
         response = view.get(request)
         self.assertEqual(response.status, 400)
+
+    async def test_start_learn_view_invokes_start_ir_learning(self) -> None:
+        api = importlib.import_module("custom_components.easyir.signal_log.api")
+        from homeassistant.components import http
+
+        self.hass.config_entries = type(
+            "Cfg",
+            (),
+            {"async_entries": lambda _self, _domain: [object()]},
+        )()
+        app = {http.KEY_HASS: self.hass}
+        request = make_mocked_request(
+            "POST",
+            "/api/easyir/signal_log/start_learn",
+            app=app,
+            headers={"Content-Type": "application/json"},
+        )
+        request._read_bytes = json.dumps({"ieee": "aa:bb:cc:dd:ee:ff", "timeout_s": 12}).encode()
+        view = api.EasyIrSignalLogStartLearnView()
+        with patch(
+            "custom_components.easyir.signal_log.api.async_detect_ir_learn_profile",
+            new=AsyncMock(return_value="ts1201_zosung"),
+        ) as detect_mock, patch(
+            "custom_components.easyir.signal_log.api.async_start_ir_learning",
+            new=AsyncMock(return_value={"status": "learning", "vendor_profile": "ts1201_zosung"}),
+        ) as start_mock:
+            response = await view.post(request)
+        self.assertEqual(response.status, 200)
+        payload = json.loads(response.body.decode())
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["vendor_profile"], "ts1201_zosung")
+        detect_mock.assert_awaited_once_with(self.hass, "aa:bb:cc:dd:ee:ff")
+        start_mock.assert_awaited_once_with(
+            self.hass,
+            ieee="aa:bb:cc:dd:ee:ff",
+            vendor_profile="ts1201_zosung",
+            timeout_s=12,
+        )
 
 
 if __name__ == "__main__":

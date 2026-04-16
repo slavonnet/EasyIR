@@ -12,6 +12,7 @@ from homeassistant.components import http
 from homeassistant.core import HomeAssistant, callback
 
 from ..const import DOMAIN
+from ..learn import async_detect_ir_learn_profile, async_start_ir_learning
 from .event_log import IrEvent, IrEventDirection
 from .ha_bridge import get_domain_event_log
 
@@ -40,6 +41,15 @@ QUERY_SCHEMA = vol.Schema(
             vol.Coerce(int), vol.Range(min=1, max=200)
         ),
         vol.Optional("offset", default=0): vol.All(vol.Coerce(int), vol.Range(min=0)),
+    }
+)
+
+START_LEARN_SCHEMA = vol.Schema(
+    {
+        vol.Required("ieee"): vol.All(str, vol.Length(min=2)),
+        vol.Optional("timeout_s", default=20): vol.All(
+            vol.Coerce(int), vol.Range(min=1, max=120)
+        ),
     }
 )
 
@@ -248,6 +258,48 @@ class EasyIrSignalLogPageView(http.HomeAssistantView):
         )
 
 
+class EasyIrSignalLogStartLearnView(http.HomeAssistantView):
+    """Trigger learn-start path directly from the Signal Log UI."""
+
+    url = "/api/easyir/signal_log/start_learn"
+    name = "api:easyir:signal_log:start_learn"
+    requires_auth = True
+
+    async def post(self, request: web.Request) -> web.Response:
+        hass: HomeAssistant = request.app[http.KEY_HASS]
+        try:
+            raw_payload = await request.json()
+        except Exception:
+            return self.json_message("Invalid JSON payload", HTTPStatus.BAD_REQUEST)
+        try:
+            payload = START_LEARN_SCHEMA(raw_payload or {})
+        except vol.Invalid as err:
+            return self.json_message(str(err), HTTPStatus.BAD_REQUEST)
+
+        ieee = str(payload["ieee"]).strip()
+        timeout_s = int(payload["timeout_s"])
+        vendor_profile = await async_detect_ir_learn_profile(hass, ieee)
+        if not vendor_profile:
+            return self.json_message(
+                f"No supported learn profile for ieee={ieee}",
+                HTTPStatus.BAD_REQUEST,
+            )
+        result = await async_start_ir_learning(
+            hass,
+            ieee=ieee,
+            vendor_profile=vendor_profile,
+            timeout_s=timeout_s,
+        )
+        return self.json(
+            {
+                "ok": True,
+                "ieee": ieee,
+                "vendor_profile": vendor_profile,
+                "result": result,
+            }
+        )
+
+
 @callback
 def async_register_signal_log_api(hass: HomeAssistant) -> None:
     """Register HTTP views once (idempotent)."""
@@ -256,4 +308,5 @@ def async_register_signal_log_api(hass: HomeAssistant) -> None:
         return
     hass.http.register_view(EasyIrSignalLogEventsView)
     hass.http.register_view(EasyIrSignalLogPageView)
+    hass.http.register_view(EasyIrSignalLogStartLearnView)
     root["_signal_log_api_registered"] = True
