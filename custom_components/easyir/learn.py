@@ -8,6 +8,7 @@ import logging
 from typing import Any
 
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ServiceNotFound
 from homeassistant.helpers import device_registry as dr
 
 from .command_pool import async_call_pooled_service
@@ -29,6 +30,7 @@ from .const import (
 
 VENDOR_PROFILE_TS1201_ZOSUNG = "ts1201_zosung"
 _LOGGER = logging.getLogger(__name__)
+_READ_ATTR_SERVICE = "read_zigbee_cluster_attributes"
 
 
 def _emit_learn_trace_event(hass: HomeAssistant, payload: dict[str, Any]) -> None:
@@ -192,6 +194,68 @@ async def _issue_irlearn(hass: HomeAssistant, ieee: str, endpoint_id: int, on: b
     )
 
 
+def _service_is_available(hass: HomeAssistant, domain: str, service: str) -> bool:
+    """Best-effort service availability check, tolerant of test doubles."""
+    services = getattr(hass, "services", None)
+    has_service = getattr(services, "has_service", None)
+    if not callable(has_service):
+        # Unknown runtime stub; keep legacy behavior and attempt the call.
+        return True
+    try:
+        return bool(has_service(domain, service))
+    except Exception:
+        return True
+
+
+def _is_missing_service_error(err: Exception) -> bool:
+    """Return True when the exception indicates a missing HA service."""
+    if isinstance(err, ServiceNotFound):
+        return True
+    text = f"{type(err).__name__}: {err}".lower()
+    if "servicenotfound" in text:
+        return True
+    if "service not found" in text:
+        return True
+    return "action" in text and "not found" in text
+
+
+async def _read_last_learned_via_issue_command(
+    hass: HomeAssistant, ieee: str, endpoint_id: int
+) -> Any:
+    return await async_call_pooled_service(
+        hass,
+        ieee=ieee,
+        domain=ZHA_DOMAIN,
+        service=ZHA_SERVICE,
+        data={
+            "ieee": ieee,
+            "endpoint_id": endpoint_id,
+            "cluster_id": TS1201_CLUSTER_ID,
+            "cluster_type": TS1201_CLUSTER_TYPE,
+            "command": 0,
+            "command_type": TS1201_COMMAND_TYPE,
+            "params": {"attributes": [TS1201_LAST_LEARNED_ATTR_ID]},
+        },
+        return_response=True,
+        dedupe=False,
+        priority=1,
+    )
+
+
+def _extract_attr_string(result: Any, attr_id: int) -> str | None:
+    if not isinstance(result, dict):
+        return None
+    for container_name in ("success", "response"):
+        container = result.get(container_name)
+        if not isinstance(container, dict):
+            continue
+        for key in (attr_id, str(attr_id), f"0x{attr_id:04X}"):
+            value = container.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    return None
+
+
 async def _read_last_learned(hass: HomeAssistant, ieee: str, endpoint_id: int) -> str | None:
     payload = {
         "ieee": ieee,
@@ -200,36 +264,45 @@ async def _read_last_learned(hass: HomeAssistant, ieee: str, endpoint_id: int) -
         "cluster_type": TS1201_CLUSTER_TYPE,
         "attribute": [TS1201_LAST_LEARNED_ATTR_ID],
     }
-    try:
-        result = await async_call_pooled_service(
+    if _service_is_available(hass, ZHA_DOMAIN, _READ_ATTR_SERVICE):
+        try:
+            result = await async_call_pooled_service(
+                hass,
+                ieee=ieee,
+                domain=ZHA_DOMAIN,
+                service=_READ_ATTR_SERVICE,
+                data=payload,
+                return_response=True,
+                dedupe=False,
+                priority=1,
+            )
+        except Exception as err:
+            # HA/ZHA versions differ: some don't expose read-zigbee-attributes API.
+            # Fall back to generic issue_zigbee_cluster_command read-attributes.
+            if not _is_missing_service_error(err):
+                raise
+            _LOGGER.debug(
+                "Learn read fallback: service %s is unavailable (%s), using %s",
+                _READ_ATTR_SERVICE,
+                err,
+                ZHA_SERVICE,
+            )
+            result = await _read_last_learned_via_issue_command(
+                hass, ieee, endpoint_id
+            )
+    else:
+        result = await _read_last_learned_via_issue_command(hass, ieee, endpoint_id)
+    return _extract_attr_string(result, TS1201_LAST_LEARNED_ATTR_ID)
+
+
+async def _read_last_learned_legacy(hass: HomeAssistant, ieee: str, endpoint_id: int) -> str | None:
+    """Legacy parser left for safety while migrating helpers."""
+    result = await async_call_pooled_service(
             hass,
             ieee=ieee,
             domain=ZHA_DOMAIN,
-            service="read_zigbee_cluster_attributes",
+            service=_READ_ATTR_SERVICE,
             data=payload,
-            return_response=True,
-            dedupe=False,
-            priority=1,
-        )
-    except Exception as err:
-        # HA/ZHA versions differ: some don't expose read_zigbee_cluster_attributes.
-        # Fallback to generic issue_zigbee_cluster_command read-attributes.
-        if "ServiceNotFound" not in repr(err):
-            raise
-        result = await async_call_pooled_service(
-            hass,
-            ieee=ieee,
-            domain=ZHA_DOMAIN,
-            service=ZHA_SERVICE,
-            data={
-                "ieee": ieee,
-                "endpoint_id": endpoint_id,
-                "cluster_id": TS1201_CLUSTER_ID,
-                "cluster_type": TS1201_CLUSTER_TYPE,
-                "command": 0,
-                "command_type": TS1201_COMMAND_TYPE,
-                "params": {"attributes": [TS1201_LAST_LEARNED_ATTR_ID]},
-            },
             return_response=True,
             dedupe=False,
             priority=1,
