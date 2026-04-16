@@ -12,9 +12,11 @@ from homeassistant.components import http
 from homeassistant.core import HomeAssistant, callback
 
 from ..const import DOMAIN
-from ..learn import async_detect_ir_learn_profile, async_start_ir_learning
+from ..learn import async_detect_ir_learn_profile, learn_once
+from .ha_bridge import get_domain_event_log, resolve_ieee_primary_area_id
+from .event_log import build_inbound_event
+from ..helpers import decode_ir_payload_auto
 from .event_log import IrEvent, IrEventDirection
-from .ha_bridge import get_domain_event_log
 
 
 def _serialize_event(ev: IrEvent) -> dict[str, Any]:
@@ -288,13 +290,39 @@ class EasyIrSignalLogStartLearnView(http.HomeAssistantView):
                 f"No supported learn profile for ieee={ieee}",
                 HTTPStatus.BAD_REQUEST,
             )
-        result = await async_start_ir_learning(
+        result = await learn_once(
             hass,
             ieee=ieee,
-            vendor_profile=vendor_profile,
-            timeout_s=timeout_s,
             endpoint_id=endpoint_id,
+            timeout_s=timeout_s,
         )
+        code = result.get("code")
+        if isinstance(code, str) and code.strip():
+            try:
+                decoded = decode_ir_payload_auto(code)
+                timings = decoded.raw_timings
+                protocol_hint = decoded.source_encoding
+            except ValueError:
+                timings = None
+                protocol_hint = "learn_code"
+            try:
+                room_id = resolve_ieee_primary_area_id(hass, ieee)
+            except Exception:
+                room_id = None
+            get_domain_event_log(hass).append(
+                build_inbound_event(
+                    room_id=room_id,
+                    ieee=ieee,
+                    timings=timings,
+                    protocol_hint=protocol_hint,
+                    integrity_metadata={
+                        "source": "signal_log_start_learn",
+                        "vendor_profile": vendor_profile,
+                        "endpoint_id": endpoint_id,
+                    },
+                    decoded={"code_base64": code},
+                )
+            )
         return self.json(
             {
                 "ok": True,
@@ -302,6 +330,7 @@ class EasyIrSignalLogStartLearnView(http.HomeAssistantView):
                 "endpoint_id": endpoint_id,
                 "vendor_profile": vendor_profile,
                 "result": result,
+                "code": code,
             }
         )
 

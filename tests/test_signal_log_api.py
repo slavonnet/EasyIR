@@ -187,7 +187,7 @@ class TestSignalLogQueryParsing(unittest.IsolatedAsyncioTestCase):
         response = view.get(request)
         self.assertEqual(response.status, 400)
 
-    async def test_start_learn_view_invokes_start_ir_learning(self) -> None:
+    async def test_start_learn_view_invokes_learn_once(self) -> None:
         api = importlib.import_module("custom_components.easyir.signal_log.api")
         from homeassistant.components import http
 
@@ -211,22 +211,70 @@ class TestSignalLogQueryParsing(unittest.IsolatedAsyncioTestCase):
             "custom_components.easyir.signal_log.api.async_detect_ir_learn_profile",
             new=AsyncMock(return_value="ts1201_zosung"),
         ) as detect_mock, patch(
-            "custom_components.easyir.signal_log.api.async_start_ir_learning",
-            new=AsyncMock(return_value={"status": "learning", "vendor_profile": "ts1201_zosung"}),
-        ) as start_mock:
+            "custom_components.easyir.signal_log.api.learn_once",
+            new=AsyncMock(return_value={"vendor_profile": "ts1201_zosung"}),
+        ) as learn_mock:
             response = await view.post(request)
         self.assertEqual(response.status, 200)
         payload = json.loads(response.body.decode())
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["vendor_profile"], "ts1201_zosung")
         detect_mock.assert_awaited_once_with(self.hass, "aa:bb:cc:dd:ee:ff")
-        start_mock.assert_awaited_once_with(
+        learn_mock.assert_awaited_once_with(
             self.hass,
             ieee="aa:bb:cc:dd:ee:ff",
-            endpoint_id=2,
-            vendor_profile="ts1201_zosung",
             timeout_s=12,
+            endpoint_id=2,
         )
+
+    async def test_start_learn_view_runs_full_learn_once_and_logs_event(self) -> None:
+        api = importlib.import_module("custom_components.easyir.signal_log.api")
+        from homeassistant.components import http
+
+        app = {http.KEY_HASS: self.hass}
+        request = make_mocked_request(
+            "POST",
+            "/api/easyir/signal_log/start_learn",
+            app=app,
+            headers={"Content-Type": "application/json"},
+        )
+        request._read_bytes = json.dumps(
+            {"ieee": "aa:bb:cc:dd:ee:ff", "endpoint_id": 1, "timeout_s": 20}
+        ).encode()
+        view = api.EasyIrSignalLogStartLearnView()
+        with patch(
+            "custom_components.easyir.signal_log.api.async_detect_ir_learn_profile",
+            new=AsyncMock(return_value="ts1201_zosung"),
+        ) as detect_mock, patch(
+            "custom_components.easyir.signal_log.api.resolve_ieee_primary_area_id",
+            return_value=None,
+        ), patch(
+            "custom_components.easyir.signal_log.api.learn_once",
+            new=AsyncMock(
+                return_value={
+                    "code": "QWxhZGRpbjpvcGVuIHNlc2FtZQ==",
+                    "vendor_profile": "ts1201_zosung",
+                }
+            ),
+        ) as learn_mock:
+            response = await view.post(request)
+        self.assertEqual(response.status, 200)
+        payload = json.loads(response.body.decode())
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["code"], "QWxhZGRpbjpvcGVuIHNlc2FtZQ==")
+        detect_mock.assert_awaited_once_with(self.hass, "aa:bb:cc:dd:ee:ff")
+        learn_mock.assert_awaited_once_with(
+            self.hass,
+            ieee="aa:bb:cc:dd:ee:ff",
+            endpoint_id=1,
+            timeout_s=20,
+        )
+        log = self.hass.data[DOMAIN][DATA_EVENT_LOG]
+        events = list(log.iter_events(limit=10, offset=0))
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].direction, IrEventDirection.INBOUND)
+        self.assertEqual(events[0].protocol_hint, "learn_code")
+        self.assertEqual(events[0].decoded["code_base64"], "QWxhZGRpbjpvcGVuIHNlc2FtZQ==")
 
     async def test_start_learn_view_rejects_invalid_endpoint(self) -> None:
         api = importlib.import_module("custom_components.easyir.signal_log.api")

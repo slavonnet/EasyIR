@@ -244,14 +244,15 @@ class EasyIrSignalLogPanel extends HTMLElement {
       return;
     }
     this._setBusy(true);
-    this._setStatus("Starting learn...");
+    this._setStatus("Starting learn... Press remote button now.");
     try {
       const result = await this._hass.callApi("POST", "easyir/signal_log/start_learn", payload);
       const vendor = result && result.vendor_profile ? ` vendor=${result.vendor_profile}` : "";
       const codeLen = result && result.code ? ` code_len=${String(result.code).length}` : "";
-      this._setStatusOk(`Learn completed.${vendor}${codeLen}`);
+      const source = result && result.source_encoding ? ` source=${result.source_encoding}` : "";
+      this._setStatusOk(`Learn completed.${vendor}${source}${codeLen}`);
       this._offset = 0;
-      this._load(false);
+      await this._load(false);
     } catch (err) {
       const msg = this._extractErrorMessage(err);
       this._setStatusError(`StartLearn error: ${msg}`);
