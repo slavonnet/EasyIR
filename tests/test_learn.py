@@ -177,6 +177,56 @@ class TestLearnFlow(unittest.IsolatedAsyncioTestCase):
                 endpoint_id=None,
             )
 
+    async def test_learn_once_falls_back_when_read_service_not_found(self) -> None:
+        class _ServiceNotFound(Exception):
+            pass
+
+        class _FallbackServices(_FakeServices):
+            async def async_call(  # type: ignore[override]
+                self,
+                domain: str,
+                service: str,
+                data: dict,
+                blocking: bool = True,
+                return_response: bool = False,
+            ):
+                self._calls.append(
+                    {
+                        "domain": domain,
+                        "service": service,
+                        "data": dict(data),
+                        "blocking": blocking,
+                        "return_response": return_response,
+                    }
+                )
+                if service == "read_zigbee_cluster_attributes":
+                    raise _ServiceNotFound("Action zha.read_zigbee_cluster_attributes not found")
+                if service == ZHA_SERVICE and data.get("command") == 0:
+                    return {"success": {0: "FALLBACK_OK"}}
+                return {}
+
+        hass = _FakeHass()
+        hass.services = _FallbackServices(hass.calls, responses=[])
+
+        with patch(
+            "custom_components.easyir.learn.ServiceNotFound",
+            _ServiceNotFound,
+        ):
+            payload = await learn_module.learn_once(
+                hass,
+                ieee="aa:bb:cc",
+                timeout_s=3,
+                poll_interval_s=0.01,
+            )
+
+        self.assertEqual(payload["code"], "FALLBACK_OK")
+        self.assertGreaterEqual(len(hass.calls), 3)
+        self.assertEqual(hass.calls[0]["service"], ZHA_SERVICE)
+        self.assertEqual(hass.calls[1]["service"], "read_zigbee_cluster_attributes")
+        self.assertEqual(hass.calls[2]["service"], ZHA_SERVICE)
+        self.assertEqual(hass.calls[2]["data"]["command"], 0)
+        self.assertEqual(hass.calls[2]["data"]["params"], {"attributes": [0]})
+
     async def test_async_start_ir_learning_respects_explicit_endpoint(self) -> None:
         hass = _FakeHass(responses=[{}])
         result = await learn_module.async_start_ir_learning(
