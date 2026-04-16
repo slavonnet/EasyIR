@@ -284,6 +284,60 @@ class TestLearnFlow(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(hass.calls[2]["data"]["command"], 0)
         self.assertEqual(hass.calls[2]["data"]["params"], {"attributes": [0]})
 
+    async def test_learn_once_handles_service_validation_error_via_gateway_fallback(
+        self,
+    ) -> None:
+        class _ServiceValidationError(Exception):
+            pass
+
+        class _ValidationServices(_FakeServices):
+            async def async_call(  # type: ignore[override]
+                self,
+                domain: str,
+                service: str,
+                data: dict,
+                blocking: bool = True,
+                return_response: bool = False,
+            ):
+                self._calls.append(
+                    {
+                        "domain": domain,
+                        "service": service,
+                        "data": dict(data),
+                        "blocking": blocking,
+                        "return_response": return_response,
+                    }
+                )
+                if service == "read_zigbee_cluster_attributes":
+                    raise _ServiceValidationError(
+                        "An action which does not return responses can't be called with return_response=True"
+                    )
+                return {}
+
+        hass = _FakeHass(responses=[])
+        hass.services = _ValidationServices(hass.calls, responses=[])
+
+        with patch(
+            "custom_components.easyir.learn.ServiceValidationError",
+            _ServiceValidationError,
+        ), patch(
+            "custom_components.easyir.learn._read_last_learned_via_zha_gateway",
+            new=AsyncMock(return_value="GW_FALLBACK_CODE"),
+        ) as gateway_mock:
+            payload = await learn_module.learn_once(
+                hass,
+                ieee="aa:bb:cc",
+                endpoint_id=1,
+                timeout_s=1,
+                poll_interval_s=0.01,
+            )
+
+        self.assertEqual(payload["code"], "GW_FALLBACK_CODE")
+        gateway_mock.assert_awaited_once_with(hass, "aa:bb:cc", 1)
+        self.assertGreaterEqual(len(hass.calls), 2)
+        self.assertEqual(hass.calls[0]["service"], ZHA_SERVICE)
+        self.assertEqual(hass.calls[1]["service"], "read_zigbee_cluster_attributes")
+
 
 if __name__ == "__main__":
     unittest.main()
