@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from http import HTTPStatus
+import logging
+import logging
 from typing import Any
 
 from aiohttp import web
@@ -17,6 +19,10 @@ from .ha_bridge import get_domain_event_log, resolve_ieee_primary_area_id
 from .event_log import build_inbound_event
 from ..helpers import decode_ir_payload_auto
 from .event_log import IrEvent, IrEventDirection
+
+_LOGGER = logging.getLogger(__name__)
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def _serialize_event(ev: IrEvent) -> dict[str, Any]:
@@ -290,12 +296,40 @@ class EasyIrSignalLogStartLearnView(http.HomeAssistantView):
                 f"No supported learn profile for ieee={ieee}",
                 HTTPStatus.BAD_REQUEST,
             )
-        result = await learn_once(
-            hass,
-            ieee=ieee,
-            endpoint_id=endpoint_id,
-            timeout_s=timeout_s,
-        )
+        try:
+            result = await learn_once(
+                hass,
+                ieee=ieee,
+                endpoint_id=endpoint_id,
+                timeout_s=timeout_s,
+            )
+        except TimeoutError as err:
+            _LOGGER.warning(
+                "StartLearn timeout ieee=%s endpoint_id=%s timeout_s=%s",
+                ieee,
+                endpoint_id,
+                timeout_s,
+            )
+            return self.json_message(str(err), HTTPStatus.REQUEST_TIMEOUT)
+        except ValueError as err:
+            _LOGGER.warning(
+                "StartLearn bad request ieee=%s endpoint_id=%s: %s",
+                ieee,
+                endpoint_id,
+                err,
+            )
+            return self.json_message(str(err), HTTPStatus.BAD_REQUEST)
+        except Exception as err:
+            _LOGGER.exception(
+                "StartLearn failed ieee=%s endpoint_id=%s timeout_s=%s",
+                ieee,
+                endpoint_id,
+                timeout_s,
+            )
+            return self.json_message(
+                f"StartLearn internal error: {type(err).__name__}: {err}",
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
         code = result.get("code")
         if isinstance(code, str) and code.strip():
             try:
@@ -309,20 +343,26 @@ class EasyIrSignalLogStartLearnView(http.HomeAssistantView):
                 room_id = resolve_ieee_primary_area_id(hass, ieee)
             except Exception:
                 room_id = None
-            get_domain_event_log(hass).append(
-                build_inbound_event(
-                    room_id=room_id,
-                    ieee=ieee,
-                    timings=timings,
-                    protocol_hint=protocol_hint,
-                    integrity_metadata={
-                        "source": "signal_log_start_learn",
-                        "vendor_profile": vendor_profile,
-                        "endpoint_id": endpoint_id,
-                    },
-                    decoded={"code_base64": code},
+            try:
+                get_domain_event_log(hass).append(
+                    build_inbound_event(
+                        room_id=room_id,
+                        ieee=ieee,
+                        timings=timings,
+                        protocol_hint=protocol_hint,
+                        integrity_metadata={
+                            "source": "signal_log_start_learn",
+                            "vendor_profile": vendor_profile,
+                            "endpoint_id": endpoint_id,
+                        },
+                        decoded={"code_base64": code},
+                    )
                 )
-            )
+            except Exception:
+                # Learn result is still valid; avoid surfacing 500 from log write path.
+                _LOGGER.exception(
+                    "StartLearn captured code but failed to append Signal Log event"
+                )
         return self.json(
             {
                 "ok": True,
