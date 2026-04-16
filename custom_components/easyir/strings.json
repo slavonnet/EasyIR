@@ -26,6 +26,10 @@
       "name": "Learn IR code from hub (legacy alias)",
       "description": "Compatibility alias for learn_once. Uses the same one-shot learn flow.",
       "fields": {
+        "hub_id": {
+          "name": "Hub ID",
+          "description": "Optional EasyIR config entry id (preferred target selector)."
+        },
         "ieee": {
           "name": "IEEE",
           "description": "Optional if default IEEE is set via integration UI setup."
@@ -44,6 +48,10 @@
       "name": "Learn IR code from hub",
       "description": "Enable IR learn mode on a supported hub, wait for one remote button press, read learned code, then rely on hub auto-exit from learn mode.",
       "fields": {
+        "hub_id": {
+          "name": "Hub ID",
+          "description": "Optional EasyIR config entry id (preferred target selector)."
+        },
         "ieee": {
           "name": "IEEE",
           "description": "Optional if default IEEE is set via integration UI setup."
