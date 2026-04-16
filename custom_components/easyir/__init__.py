@@ -16,9 +16,11 @@ from .const import (
     CONF_ENDPOINT_ID,
     CONF_IEEE,
     CONF_PROFILE_PATH,
+    DEBUG_EVENT_LEARN_ONCE_HANDLER_ENTER,
     DEFAULT_ENDPOINT_ID,
     DOMAIN,
     PLATFORMS,
+    SERVICE_LEARN_CODE_LEGACY,
     SERVICE_SEND_RAW,
     SERVICE_SEND_COMMAND,
     SERVICE_LEARN_ONCE,
@@ -119,6 +121,20 @@ LEARN_ONCE_SCHEMA = vol.Schema(
         vol.Optional("timeout_s", default=20): vol.All(
             vol.Coerce(int), vol.Range(min=1, max=120)
         ),
+        vol.Optional("timeout_seconds"): vol.All(
+            vol.Coerce(int), vol.Range(min=1, max=120)
+        ),
+    }
+)
+
+LEARN_CODE_LEGACY_SCHEMA = vol.Schema(
+    {
+        vol.Optional(CONF_IEEE): cv.string,
+        vol.Optional(CONF_ENDPOINT_ID, default=DEFAULT_ENDPOINT_ID): vol.Coerce(int),
+        vol.Optional("timeout_seconds", default=20): vol.All(
+            vol.Coerce(int), vol.Range(min=1, max=120)
+        ),
+        vol.Optional("timeout_s"): vol.All(vol.Coerce(int), vol.Range(min=1, max=120)),
     }
 )
 
@@ -215,7 +231,21 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         if not ieee:
             raise vol.Invalid("Missing required 'ieee' in service data or config entry")
         endpoint_id = _get_merged_value(call, CONF_ENDPOINT_ID) or TS1201_ENDPOINT_ID
-        timeout_s = int(call.data.get("timeout_s", 20))
+        timeout_s = int(call.data.get("timeout_s") or call.data.get("timeout_seconds") or 20)
+        _LOGGER.warning(
+            "EasyIR learn_once handler start ieee=%s endpoint=%s timeout_s=%s",
+            ieee,
+            endpoint_id,
+            timeout_s,
+        )
+        hass.bus.async_fire(
+            DEBUG_EVENT_LEARN_ONCE_HANDLER_ENTER,
+            {
+                "ieee": str(ieee),
+                "endpoint_id": int(endpoint_id),
+                "timeout_s": timeout_s,
+            },
+        )
         await learn_once(
             hass,
             ieee=str(ieee),
@@ -240,6 +270,13 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         SERVICE_LEARN_ONCE,
         handle_learn_once,
         schema=LEARN_ONCE_SCHEMA,
+    )
+    # Backward-compatible alias for old service naming used in early UI/docs.
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_LEARN_CODE_LEGACY,
+        handle_learn_once,
+        schema=LEARN_CODE_LEGACY_SCHEMA,
     )
 
     return True
