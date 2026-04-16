@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Iterable
 from dataclasses import dataclass
 import logging
 from typing import Any
@@ -10,6 +11,12 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceNotFound
 from homeassistant.helpers import device_registry as dr
+
+try:
+    from homeassistant.exceptions import ServiceValidationError
+except ImportError:  # pragma: no cover - older HA compatibility
+    class ServiceValidationError(Exception):
+        """Fallback type when HA has no ServiceValidationError class."""
 
 from .command_pool import async_call_pooled_service
 from .const import (
@@ -219,27 +226,62 @@ def _is_missing_service_error(err: Exception) -> bool:
     return "action" in text and "not found" in text
 
 
+def _is_service_validation_response_error(err: Exception) -> bool:
+    """Return True for return_response validation mismatch errors."""
+    if isinstance(err, ServiceValidationError):
+        return True
+    text = f"{type(err).__name__}: {err}".lower()
+    if "servicevalidationerror" in text:
+        return True
+    if "return_response=true" in text:
+        return True
+    if "does not return responses" in text:
+        return True
+    return "return_response" in text and "can't be called" in text
+
+
 async def _read_last_learned_via_issue_command(
     hass: HomeAssistant, ieee: str, endpoint_id: int
 ) -> Any:
-    return await async_call_pooled_service(
-        hass,
-        ieee=ieee,
-        domain=ZHA_DOMAIN,
-        service=ZHA_SERVICE,
-        data={
-            "ieee": ieee,
-            "endpoint_id": endpoint_id,
-            "cluster_id": TS1201_CLUSTER_ID,
-            "cluster_type": TS1201_CLUSTER_TYPE,
-            "command": 0,
-            "command_type": TS1201_COMMAND_TYPE,
-            "params": {"attributes": [TS1201_LAST_LEARNED_ATTR_ID]},
-        },
-        return_response=True,
-        dedupe=False,
-        priority=1,
-    )
+    payload = {
+        "ieee": ieee,
+        "endpoint_id": endpoint_id,
+        "cluster_id": TS1201_CLUSTER_ID,
+        "cluster_type": TS1201_CLUSTER_TYPE,
+        "command": 0,
+        "command_type": TS1201_COMMAND_TYPE,
+        "params": {"attributes": [TS1201_LAST_LEARNED_ATTR_ID]},
+    }
+    try:
+        return await async_call_pooled_service(
+            hass,
+            ieee=ieee,
+            domain=ZHA_DOMAIN,
+            service=ZHA_SERVICE,
+            data=payload,
+            return_response=True,
+            dedupe=False,
+            priority=1,
+        )
+    except Exception as err:
+        # Some HA/ZHA service descriptors explicitly disallow return_response=True.
+        if not _is_service_validation_response_error(err):
+            raise
+        _LOGGER.debug(
+            "Learn read fallback: %s doesn't allow return_response, retrying fire-and-forget",
+            ZHA_SERVICE,
+        )
+        await async_call_pooled_service(
+            hass,
+            ieee=ieee,
+            domain=ZHA_DOMAIN,
+            service=ZHA_SERVICE,
+            data=payload,
+            return_response=False,
+            dedupe=False,
+            priority=1,
+        )
+        return None
 
 
 def _extract_attr_string(result: Any, attr_id: int) -> str | None:
@@ -253,6 +295,119 @@ def _extract_attr_string(result: Any, attr_id: int) -> str | None:
             value = container.get(key)
             if isinstance(value, str) and value.strip():
                 return value.strip()
+    return None
+
+
+def _normalize_ieee_text(value: Any) -> str:
+    """Normalize IEEE-like value for comparison across runtime object types."""
+    text = str(value).strip().lower().replace(" ", "")
+    if text.startswith("eui64(") and text.endswith(")"):
+        text = text[6:-1]
+    text = text.replace(":", "").replace("-", "").replace(".", "")
+    return text
+
+
+def _device_ieee_candidates(device: Any) -> list[str]:
+    values: list[str] = []
+    for attr_name in ("ieee", "_ieee"):
+        raw = getattr(device, attr_name, None)
+        if raw is not None:
+            values.append(str(raw))
+    nested = getattr(device, "device", None) or getattr(device, "zigpy_device", None)
+    if nested is not None:
+        raw = getattr(nested, "ieee", None)
+        if raw is not None:
+            values.append(str(raw))
+    return values
+
+
+def _iter_gateway_devices(gateway: Any) -> Iterable[Any]:
+    devices = getattr(gateway, "devices", None)
+    if isinstance(devices, dict):
+        for dev in devices.values():
+            yield dev
+    elif isinstance(devices, Iterable):
+        for dev in devices:
+            yield dev
+
+
+def _extract_attr_from_cluster_result(result: Any, attr_id: int) -> str | None:
+    if isinstance(result, tuple):
+        for part in result:
+            if isinstance(part, dict):
+                value = _extract_attr_string({"success": part}, attr_id)
+                if value:
+                    return value
+        return None
+    return _extract_attr_string({"success": result}, attr_id)
+
+
+async def _read_last_learned_via_zha_gateway(
+    hass: HomeAssistant, ieee: str, endpoint_id: int
+) -> str | None:
+    """
+    Read TS1201 learned attribute via direct ZHA gateway/zigpy access.
+
+    This path is a last-resort compatibility fallback when HA service
+    signatures differ and don't allow response-returning service calls.
+    """
+    zha_root = hass.data.get(ZHA_DOMAIN)
+    if zha_root is None:
+        return None
+    gateways: list[Any] = []
+    if isinstance(zha_root, dict):
+        gateway = zha_root.get("gateway")
+        if gateway is not None:
+            gateways.append(gateway)
+        for value in zha_root.values():
+            if value is not None and hasattr(value, "devices"):
+                gateways.append(value)
+    else:
+        gateways.append(zha_root)
+
+    target = _normalize_ieee_text(ieee)
+    seen_gateways: set[int] = set()
+    for gateway in gateways:
+        if gateway is None:
+            continue
+        marker = id(gateway)
+        if marker in seen_gateways:
+            continue
+        seen_gateways.add(marker)
+        for device in _iter_gateway_devices(gateway):
+            candidates = _device_ieee_candidates(device)
+            if not candidates:
+                continue
+            if not any(_normalize_ieee_text(item) == target for item in candidates):
+                continue
+            zigpy_device = (
+                getattr(device, "device", None)
+                or getattr(device, "zigpy_device", None)
+                or device
+            )
+            endpoints = getattr(zigpy_device, "endpoints", None)
+            if not isinstance(endpoints, dict):
+                continue
+            endpoint = endpoints.get(int(endpoint_id))
+            if endpoint is None:
+                continue
+            in_clusters = getattr(endpoint, "in_clusters", None)
+            if not isinstance(in_clusters, dict):
+                continue
+            cluster = in_clusters.get(TS1201_CLUSTER_ID)
+            if cluster is None or not hasattr(cluster, "read_attributes"):
+                continue
+            try:
+                result = await cluster.read_attributes(
+                    [TS1201_LAST_LEARNED_ATTR_ID], allow_cache=False, only_cache=False
+                )
+            except TypeError:
+                result = await cluster.read_attributes([TS1201_LAST_LEARNED_ATTR_ID])
+            except Exception:
+                continue
+            code = _extract_attr_from_cluster_result(result, TS1201_LAST_LEARNED_ATTR_ID)
+            if code:
+                return code
     return None
 
 
@@ -277,6 +432,10 @@ async def _read_last_learned(hass: HomeAssistant, ieee: str, endpoint_id: int) -
                 priority=1,
             )
         except Exception as err:
+            if _is_service_validation_response_error(err):
+                # Service exists, but this HA version disallows return_response=True.
+                # Switch to direct ZHA gateway read path.
+                return await _read_last_learned_via_zha_gateway(hass, ieee, endpoint_id)
             # HA/ZHA versions differ: some don't expose read-zigbee-attributes API.
             # Fall back to generic issue_zigbee_cluster_command read-attributes.
             if not _is_missing_service_error(err):
@@ -292,34 +451,11 @@ async def _read_last_learned(hass: HomeAssistant, ieee: str, endpoint_id: int) -
             )
     else:
         result = await _read_last_learned_via_issue_command(hass, ieee, endpoint_id)
-    return _extract_attr_string(result, TS1201_LAST_LEARNED_ATTR_ID)
-
-
-async def _read_last_learned_legacy(hass: HomeAssistant, ieee: str, endpoint_id: int) -> str | None:
-    """Legacy parser left for safety while migrating helpers."""
-    result = await async_call_pooled_service(
-            hass,
-            ieee=ieee,
-            domain=ZHA_DOMAIN,
-            service=_READ_ATTR_SERVICE,
-            data=payload,
-            return_response=True,
-            dedupe=False,
-            priority=1,
-        )
-    if not isinstance(result, dict):
-        return None
-    success = result.get("success")
-    if not isinstance(success, dict):
-        return None
-    value = success.get(TS1201_LAST_LEARNED_ATTR_ID)
-    if value is None:
-        value = success.get(str(TS1201_LAST_LEARNED_ATTR_ID))
-    if value is None:
-        value = success.get(f"0x{TS1201_LAST_LEARNED_ATTR_ID:04X}")
-    if isinstance(value, str) and value.strip():
-        return value.strip()
-    return None
+    value = _extract_attr_string(result, TS1201_LAST_LEARNED_ATTR_ID)
+    if value:
+        return value
+    # Some service calls return no useful payload on specific HA/ZHA versions.
+    return await _read_last_learned_via_zha_gateway(hass, ieee, endpoint_id)
 
 
 class Ts1201LearnAdapter:
