@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import heapq
 import json
 import time
-from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
@@ -19,18 +19,20 @@ DATA_SERVICE_CALL_POOL = "service_call_pool"
 
 @dataclass(slots=True)
 class _QueuedCall:
+    priority: int
+    order: int
     ieee: str
     domain: str
     service: str
     data: dict[str, Any]
     return_response: bool
-    dedupe_key: str
+    dedupe_key: str | None
     waiters: list[asyncio.Future[Any]] = field(default_factory=list)
 
 
 @dataclass(slots=True)
 class _PoolState:
-    queue: deque[_QueuedCall] = field(default_factory=deque)
+    queue: list[tuple[int, int, _QueuedCall]] = field(default_factory=list)
     pending_by_key: dict[str, _QueuedCall] = field(default_factory=dict)
     worker: asyncio.Task[None] | None = None
     last_sent_at: float = 0.0
@@ -60,6 +62,7 @@ class ServiceCallPool:
         self._monotonic = monotonic or time.monotonic
         self._sleeper = sleeper or asyncio.sleep
         self._state = _PoolState()
+        self._order = 0
 
     async def async_call(
         self,
@@ -69,20 +72,28 @@ class ServiceCallPool:
         service: str,
         data: dict[str, Any],
         return_response: bool = False,
+        dedupe: bool = True,
+        priority: int = 10,
     ) -> Any:
         """Enqueue service call into shared pool and await the result."""
         loop = asyncio.get_running_loop()
         waiter: asyncio.Future[Any] = loop.create_future()
         norm_ieee = str(ieee).strip().lower().replace(" ", "")
-        key = (
-            f"{norm_ieee}|{domain}|{service}|{int(return_response)}|{_canonical_payload_key(data)}"
-        )
+        key = None
+        if dedupe:
+            key = (
+                f"{norm_ieee}|{domain}|{service}|{int(return_response)}|"
+                f"{_canonical_payload_key(data)}"
+            )
         state = self._state
-        existing = state.pending_by_key.get(key)
+        existing = state.pending_by_key.get(key) if key is not None else None
         if existing is not None:
             existing.waiters.append(waiter)
         else:
+            self._order += 1
             queued = _QueuedCall(
+                priority=int(priority),
+                order=self._order,
                 ieee=norm_ieee,
                 domain=domain,
                 service=service,
@@ -91,15 +102,16 @@ class ServiceCallPool:
                 dedupe_key=key,
                 waiters=[waiter],
             )
-            state.queue.append(queued)
-            state.pending_by_key[key] = queued
+            heapq.heappush(state.queue, (queued.priority, queued.order, queued))
+            if key is not None:
+                state.pending_by_key[key] = queued
             if state.worker is None or state.worker.done():
                 state.worker = asyncio.create_task(self._run_worker(state))
         return await waiter
 
     async def _run_worker(self, state: _PoolState) -> None:
         while state.queue:
-            queued = state.queue.popleft()
+            _, _, queued = heapq.heappop(state.queue)
             now = self._monotonic()
             wait_s = self._min_interval_s - (now - state.last_sent_at)
             if wait_s > 0:
@@ -121,7 +133,8 @@ class ServiceCallPool:
                     if not waiter.done():
                         waiter.set_result(result)
             finally:
-                state.pending_by_key.pop(queued.dedupe_key, None)
+                if queued.dedupe_key is not None:
+                    state.pending_by_key.pop(queued.dedupe_key, None)
                 state.last_sent_at = self._monotonic()
         state.worker = None
 
@@ -161,6 +174,8 @@ async def async_call_pooled_service(
     service: str,
     data: dict[str, Any],
     return_response: bool = False,
+    dedupe: bool = True,
+    priority: int = 10,
 ) -> Any:
     """Convenience wrapper around the shared per-IEEE call pool."""
     pool = get_service_call_pool(hass)
@@ -170,4 +185,6 @@ async def async_call_pooled_service(
         service=service,
         data=data,
         return_response=return_response,
+        dedupe=dedupe,
+        priority=priority,
     )
