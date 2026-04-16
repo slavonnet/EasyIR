@@ -148,6 +148,57 @@ class TestCommandPool(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(marks), 2)
         self.assertGreaterEqual(marks[1] - marks[0], 1.0)
 
+    async def test_priority_executes_lower_number_first(self) -> None:
+        hass = _FakeHass()
+        pool = ServiceCallPool(hass, min_interval_s=0.0)
+        hass.services._release_next.set()
+
+        low = asyncio.create_task(
+            pool.async_call(
+                ieee="aa:bb",
+                domain="zha",
+                service="issue_zigbee_cluster_command",
+                data={"params": {"code": "low"}},
+                priority=10,
+            )
+        )
+        high = asyncio.create_task(
+            pool.async_call(
+                ieee="aa:bb",
+                domain="zha",
+                service="issue_zigbee_cluster_command",
+                data={"params": {"code": "high"}},
+                priority=0,
+            )
+        )
+        await asyncio.gather(low, high)
+        self.assertEqual(len(hass.services.calls), 2)
+        self.assertEqual(hass.services.calls[0]["data"]["params"]["code"], "high")
+        self.assertEqual(hass.services.calls[1]["data"]["params"]["code"], "low")
+
+    async def test_dedupe_can_be_disabled(self) -> None:
+        hass = _FakeHass()
+        pool = ServiceCallPool(hass, min_interval_s=0.0)
+        payload = {"params": {"code": "same"}}
+        hass.services._release_next.set()
+        await asyncio.gather(
+            pool.async_call(
+                ieee="aa:bb",
+                domain="zha",
+                service="issue_zigbee_cluster_command",
+                data=payload,
+                dedupe=False,
+            ),
+            pool.async_call(
+                ieee="aa:bb",
+                domain="zha",
+                service="issue_zigbee_cluster_command",
+                data=payload,
+                dedupe=False,
+            ),
+        )
+        self.assertEqual(len(hass.services.calls), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -22,7 +22,7 @@
     }
   },
   "services": {
-    "learn_code": {
+    "learn_once": {
       "name": "Learn IR code from hub",
       "description": "Enable IR learn mode on a supported hub, wait for one remote button press, read learned code, then rely on hub auto-exit from learn mode.",
       "fields": {
@@ -34,7 +34,7 @@
           "name": "Endpoint id",
           "description": "Optional endpoint id (default 1)."
         },
-        "timeout_seconds": {
+        "timeout_s": {
           "name": "Timeout seconds",
           "description": "Maximum wait time for one learned code."
         }

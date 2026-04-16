@@ -1,6 +1,6 @@
 {
   "services": {
-    "learn_code": {
+    "learn_once": {
       "name": "Выучить один IR-код",
       "description": "Включает режим Learn на IR-хабе и ждёт один код (или до тайм-аута).",
       "fields": {
@@ -12,7 +12,7 @@
           "name": "Endpoint",
           "description": "Endpoint ZHA для IR-кластера."
         },
-        "timeout_seconds": {
+        "timeout_s": {
           "name": "Тайм-аут (секунды)",
           "description": "Сколько ждать IR-код после включения Learn."
         }

@@ -87,6 +87,8 @@ async def _issue_irlearn(hass: HomeAssistant, ieee: str, endpoint_id: int, on: b
             "params": {"on_off": bool(on)},
         },
         return_response=False,
+        dedupe=False,
+        priority=0,
     )
 
 
@@ -104,6 +106,8 @@ async def _read_last_learned(hass: HomeAssistant, ieee: str, endpoint_id: int) -
             "attribute": [TS1201_LAST_LEARNED_ATTR_ID],
         },
         return_response=True,
+        dedupe=False,
+        priority=1,
     )
     if not isinstance(result, dict):
         return None
@@ -285,6 +289,8 @@ async def async_read_learned_ir_code(
             "params": {"attributes": [IR_LEARN_ATTRIBUTE_ID]},
         },
         return_response=True,
+        dedupe=False,
+        priority=1,
     )
     code = _extract_learn_attr_code(result)
     if not code:
