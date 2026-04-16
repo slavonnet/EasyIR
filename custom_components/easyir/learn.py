@@ -248,18 +248,22 @@ async def async_start_ir_learning(
     *,
     ieee: str,
     vendor_profile: str,
+    endpoint_id: int | None = None,
     timeout_s: int = 30,
 ) -> dict[str, Any]:
     """Start learn mode for one hub according to vendor profile implementation."""
     if vendor_profile != VENDOR_PROFILE_TS1201_ZOSUNG:
         raise ValueError(f"Unsupported learn vendor profile: {vendor_profile}")
     entry_data = _entry_for_ieee(hass, ieee)
+    resolved_endpoint_id = (
+        int(endpoint_id) if endpoint_id is not None else _entry_endpoint_id(entry_data)
+    )
     adapter = Ts1201LearnAdapter()
     return await adapter.async_start_learning(
         hass,
         ieee,
         timeout_s=timeout_s,
-        endpoint_id=_entry_endpoint_id(entry_data),
+        endpoint_id=resolved_endpoint_id,
     )
 
 
