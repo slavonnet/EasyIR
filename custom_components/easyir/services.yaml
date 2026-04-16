@@ -98,3 +98,37 @@ learn_once:
           min: 5
           max: 120
           mode: box
+
+learn_code:
+  name: Learn IR code from hub (legacy alias)
+  description: Backward-compatible alias for learn_once.
+  fields:
+    ieee:
+      required: false
+      description: Optional if default IEEE is set via integration UI setup.
+      selector:
+        text:
+    endpoint_id:
+      required: false
+      default: 1
+      selector:
+        number:
+          min: 1
+          max: 240
+          mode: box
+    timeout_seconds:
+      required: false
+      default: 25
+      selector:
+        number:
+          min: 5
+          max: 120
+          mode: box
+    timeout_s:
+      required: false
+      default: 25
+      selector:
+        number:
+          min: 5
+          max: 120
+          mode: box

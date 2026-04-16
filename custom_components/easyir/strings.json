@@ -22,6 +22,24 @@
     }
   },
   "services": {
+    "learn_code": {
+      "name": "Learn IR code from hub (legacy alias)",
+      "description": "Compatibility alias for learn_once. Uses the same one-shot learn flow.",
+      "fields": {
+        "ieee": {
+          "name": "IEEE",
+          "description": "Optional if default IEEE is set via integration UI setup."
+        },
+        "endpoint_id": {
+          "name": "Endpoint id",
+          "description": "Optional endpoint id (default 1)."
+        },
+        "timeout_s": {
+          "name": "Timeout seconds",
+          "description": "Maximum wait time for one learned code."
+        }
+      }
+    },
     "learn_once": {
       "name": "Learn IR code from hub",
       "description": "Enable IR learn mode on a supported hub, wait for one remote button press, read learned code, then rely on hub auto-exit from learn mode.",

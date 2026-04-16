@@ -74,6 +74,12 @@ class EasyIrSignalLogPanel extends HTMLElement {
           color: var(--secondary-text-color);
           min-height: 1em;
         }
+        .status.error {
+          color: var(--error-color, #d32f2f);
+        }
+        .status.ok {
+          color: var(--success-color, #2e7d32);
+        }
         table {
           width: 100%;
           border-collapse: collapse;
@@ -98,6 +104,15 @@ class EasyIrSignalLogPanel extends HTMLElement {
         }
       </style>
       <h2>EasyIR Signal Log</h2>
+      <div class="row">
+        <label for="learn-ieee">Learn IEEE</label>
+        <input id="learn-ieee" type="text" placeholder="aa:bb:cc:dd:ee:ff" />
+        <label for="learn-endpoint">Endpoint</label>
+        <input id="learn-endpoint" type="number" min="1" max="240" value="1" />
+        <label for="learn-timeout">Timeout (s)</label>
+        <input id="learn-timeout" type="number" min="5" max="120" value="20" />
+        <button id="start-learn" type="button">StartLearn</button>
+      </div>
       <div class="row">
         <label for="room">Room (area id)</label>
         <input id="room" type="text" placeholder="optional" />
@@ -130,6 +145,9 @@ class EasyIrSignalLogPanel extends HTMLElement {
   }
 
   _bindActions() {
+    this.shadowRoot.getElementById("start-learn").addEventListener("click", () => {
+      this._startLearn();
+    });
     this.shadowRoot.getElementById("load").addEventListener("click", () => {
       this._offset = 0;
       this._load(false);
@@ -160,7 +178,63 @@ class EasyIrSignalLogPanel extends HTMLElement {
   }
 
   _setStatus(text) {
-    this.shadowRoot.getElementById("status").textContent = text;
+    const el = this.shadowRoot.getElementById("status");
+    el.classList.remove("error", "ok");
+    el.textContent = text;
+  }
+
+  _setStatusError(text) {
+    const el = this.shadowRoot.getElementById("status");
+    el.classList.remove("ok");
+    el.classList.add("error");
+    el.textContent = text;
+  }
+
+  _setStatusOk(text) {
+    const el = this.shadowRoot.getElementById("status");
+    el.classList.remove("error");
+    el.classList.add("ok");
+    el.textContent = text;
+  }
+
+  _learnPayload() {
+    const ieee = this.shadowRoot.getElementById("learn-ieee").value.trim();
+    const endpointRaw = Number.parseInt(this.shadowRoot.getElementById("learn-endpoint").value || "1", 10);
+    const timeoutRaw = Number.parseInt(this.shadowRoot.getElementById("learn-timeout").value || "20", 10);
+    if (!ieee) {
+      throw new Error("Learn IEEE is required");
+    }
+    const endpoint_id = Number.isNaN(endpointRaw) ? 1 : Math.max(1, Math.min(240, endpointRaw));
+    const timeout_s = Number.isNaN(timeoutRaw) ? 20 : Math.max(5, Math.min(120, timeoutRaw));
+    return { ieee, endpoint_id, timeout_s };
+  }
+
+  async _startLearn() {
+    if (!this._hass || this._loading) {
+      return;
+    }
+    let payload;
+    try {
+      payload = this._learnPayload();
+    } catch (err) {
+      this._setStatusError(err.message || String(err));
+      return;
+    }
+    this._setBusy(true);
+    this._setStatus("Starting learn...");
+    try {
+      const result = await this._hass.callApi("POST", "easyir/signal_log/start_learn", payload);
+      const vendor = result && result.vendor_profile ? ` vendor=${result.vendor_profile}` : "";
+      const codeLen = result && result.code ? ` code_len=${String(result.code).length}` : "";
+      this._setStatusOk(`Learn completed.${vendor}${codeLen}`);
+      this._offset = 0;
+      this._load(false);
+    } catch (err) {
+      const msg = (err && err.message) ? err.message : String(err);
+      this._setStatusError(`StartLearn error: ${msg}`);
+    } finally {
+      this._setBusy(false);
+    }
   }
 
   _setBusy(value) {

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+import logging
 from typing import Any
 
 from homeassistant.core import HomeAssistant
@@ -20,11 +21,21 @@ from .const import (
     TS1201_COMMAND_TYPE,
     TS1201_IRLEARN_COMMAND_ID,
     TS1201_LAST_LEARNED_ATTR_ID,
+    EVENT_LEARN_TRACE,
     ZHA_DOMAIN,
     ZHA_SERVICE,
 )
 
 VENDOR_PROFILE_TS1201_ZOSUNG = "ts1201_zosung"
+_LOGGER = logging.getLogger(__name__)
+
+
+def _emit_learn_trace_event(hass: HomeAssistant, payload: dict[str, Any]) -> None:
+    """Emit optional debug event if hass bus is available."""
+    bus = getattr(hass, "bus", None)
+    if bus is None or not hasattr(bus, "async_fire"):
+        return
+    bus.async_fire(EVENT_LEARN_TRACE, payload)
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,23 +83,56 @@ def _entry_endpoint_id(entry_data: dict[str, Any] | None) -> int:
 
 
 async def _issue_irlearn(hass: HomeAssistant, ieee: str, endpoint_id: int, on: bool) -> None:
+    payload = {
+        "ieee": ieee,
+        "endpoint_id": endpoint_id,
+        "cluster_id": TS1201_CLUSTER_ID,
+        "cluster_type": TS1201_CLUSTER_TYPE,
+        "command": TS1201_IRLEARN_COMMAND_ID,
+        "command_type": TS1201_COMMAND_TYPE,
+        "params": {"on_off": bool(on)},
+    }
+    _LOGGER.debug(
+        "easyir.learn_trace stage=issue_irlearn_prepare ieee=%s endpoint_id=%s on=%s payload=%s",
+        ieee,
+        endpoint_id,
+        bool(on),
+        payload,
+    )
+    _emit_learn_trace_event(
+        hass,
+        {
+            "stage": "issue_irlearn_prepare",
+            "ieee": ieee,
+            "endpoint_id": endpoint_id,
+            "on": bool(on),
+            "payload": payload,
+        },
+    )
     await async_call_pooled_service(
         hass,
         ieee=ieee,
         domain=ZHA_DOMAIN,
         service=ZHA_SERVICE,
-        data={
-            "ieee": ieee,
-            "endpoint_id": endpoint_id,
-            "cluster_id": TS1201_CLUSTER_ID,
-            "cluster_type": TS1201_CLUSTER_TYPE,
-            "command": TS1201_IRLEARN_COMMAND_ID,
-            "command_type": TS1201_COMMAND_TYPE,
-            "params": {"on_off": bool(on)},
-        },
+        data=payload,
         return_response=False,
         dedupe=False,
         priority=0,
+    )
+    _LOGGER.debug(
+        "easyir.learn_trace stage=issue_irlearn_sent ieee=%s endpoint_id=%s on=%s",
+        ieee,
+        endpoint_id,
+        bool(on),
+    )
+    _emit_learn_trace_event(
+        hass,
+        {
+            "stage": "issue_irlearn_sent",
+            "ieee": ieee,
+            "endpoint_id": endpoint_id,
+            "on": bool(on),
+        },
     )
 
 
