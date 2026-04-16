@@ -2,6 +2,8 @@
 
 Author: Badalyan Vyacheslav
 
+** THIS IS in DEV STATE. Watch for Releases **
+
 Custom Home Assistant integration for IR command delivery in Home Assistant with
 backward-compatible services and an expanding protocol/transport core.
 
