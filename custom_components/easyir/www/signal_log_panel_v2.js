@@ -209,6 +209,29 @@ class EasyIrSignalLogPanel extends HTMLElement {
     return { ieee, endpoint_id, timeout_s };
   }
 
+  _extractErrorMessage(err) {
+    if (!err) {
+      return "Unknown error";
+    }
+    if (typeof err === "string") {
+      return err;
+    }
+    if (err.message) {
+      return String(err.message);
+    }
+    if (err.error && typeof err.error === "string") {
+      return err.error;
+    }
+    if (err.body && typeof err.body === "string") {
+      return err.body;
+    }
+    try {
+      return JSON.stringify(err);
+    } catch (_jsonErr) {
+      return String(err);
+    }
+  }
+
   async _startLearn() {
     if (!this._hass || this._loading) {
       return;
@@ -230,7 +253,7 @@ class EasyIrSignalLogPanel extends HTMLElement {
       this._offset = 0;
       this._load(false);
     } catch (err) {
-      const msg = (err && err.message) ? err.message : String(err);
+      const msg = this._extractErrorMessage(err);
       this._setStatusError(`StartLearn error: ${msg}`);
     } finally {
       this._setBusy(false);

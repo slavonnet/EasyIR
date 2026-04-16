@@ -47,6 +47,9 @@ QUERY_SCHEMA = vol.Schema(
 START_LEARN_SCHEMA = vol.Schema(
     {
         vol.Required("ieee"): vol.All(str, vol.Length(min=2)),
+        vol.Optional("endpoint_id", default=1): vol.All(
+            vol.Coerce(int), vol.Range(min=1, max=240)
+        ),
         vol.Optional("timeout_s", default=20): vol.All(
             vol.Coerce(int), vol.Range(min=1, max=120)
         ),
@@ -277,6 +280,7 @@ class EasyIrSignalLogStartLearnView(http.HomeAssistantView):
             return self.json_message(str(err), HTTPStatus.BAD_REQUEST)
 
         ieee = str(payload["ieee"]).strip()
+        endpoint_id = int(payload["endpoint_id"])
         timeout_s = int(payload["timeout_s"])
         vendor_profile = await async_detect_ir_learn_profile(hass, ieee)
         if not vendor_profile:
@@ -289,11 +293,13 @@ class EasyIrSignalLogStartLearnView(http.HomeAssistantView):
             ieee=ieee,
             vendor_profile=vendor_profile,
             timeout_s=timeout_s,
+            endpoint_id=endpoint_id,
         )
         return self.json(
             {
                 "ok": True,
                 "ieee": ieee,
+                "endpoint_id": endpoint_id,
                 "vendor_profile": vendor_profile,
                 "result": result,
             }

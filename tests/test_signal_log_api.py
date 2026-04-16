@@ -203,7 +203,9 @@ class TestSignalLogQueryParsing(unittest.IsolatedAsyncioTestCase):
             app=app,
             headers={"Content-Type": "application/json"},
         )
-        request._read_bytes = json.dumps({"ieee": "aa:bb:cc:dd:ee:ff", "timeout_s": 12}).encode()
+        request._read_bytes = json.dumps(
+            {"ieee": "aa:bb:cc:dd:ee:ff", "endpoint_id": 2, "timeout_s": 12}
+        ).encode()
         view = api.EasyIrSignalLogStartLearnView()
         with patch(
             "custom_components.easyir.signal_log.api.async_detect_ir_learn_profile",
@@ -221,9 +223,30 @@ class TestSignalLogQueryParsing(unittest.IsolatedAsyncioTestCase):
         start_mock.assert_awaited_once_with(
             self.hass,
             ieee="aa:bb:cc:dd:ee:ff",
+            endpoint_id=2,
             vendor_profile="ts1201_zosung",
             timeout_s=12,
         )
+
+    async def test_start_learn_view_rejects_invalid_endpoint(self) -> None:
+        api = importlib.import_module("custom_components.easyir.signal_log.api")
+        from homeassistant.components import http
+
+        app = {http.KEY_HASS: self.hass}
+        request = make_mocked_request(
+            "POST",
+            "/api/easyir/signal_log/start_learn",
+            app=app,
+            headers={"Content-Type": "application/json"},
+        )
+        request._read_bytes = json.dumps(
+            {"ieee": "aa:bb:cc:dd:ee:ff", "endpoint_id": 0}
+        ).encode()
+        view = api.EasyIrSignalLogStartLearnView()
+        response = await view.post(request)
+        self.assertEqual(response.status, 400)
+        payload = json.loads(response.body.decode())
+        self.assertIn("endpoint_id", payload["message"])
 
 
 if __name__ == "__main__":
