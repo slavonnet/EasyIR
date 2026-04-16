@@ -191,11 +191,6 @@ class TestSignalLogQueryParsing(unittest.IsolatedAsyncioTestCase):
         api = importlib.import_module("custom_components.easyir.signal_log.api")
         from homeassistant.components import http
 
-        self.hass.config_entries = type(
-            "Cfg",
-            (),
-            {"async_entries": lambda _self, _domain: [object()]},
-        )()
         app = {http.KEY_HASS: self.hass}
         request = make_mocked_request(
             "POST",
@@ -208,20 +203,40 @@ class TestSignalLogQueryParsing(unittest.IsolatedAsyncioTestCase):
         ).encode()
         view = api.EasyIrSignalLogStartLearnView()
         with patch(
-            "custom_components.easyir.signal_log.api.async_detect_ir_learn_profile",
-            new=AsyncMock(return_value="ts1201_zosung"),
-        ) as detect_mock, patch(
+            "custom_components.easyir.signal_log.api.async_resolve_learn_target",
+            new=AsyncMock(
+                return_value={
+                    "hub_id": None,
+                    "ieee": "aa:bb:cc:dd:ee:ff",
+                    "endpoint_id": 2,
+                    "vendor_profile": "ts1201_zosung",
+                }
+            ),
+        ) as resolve_mock, patch(
             "custom_components.easyir.signal_log.api.learn_once",
-            new=AsyncMock(return_value={"vendor_profile": "ts1201_zosung"}),
+            new=AsyncMock(
+                return_value={
+                    "vendor_profile": "ts1201_zosung",
+                    "ieee": "aa:bb:cc:dd:ee:ff",
+                    "endpoint_id": 2,
+                    "hub_id": None,
+                }
+            ),
         ) as learn_mock:
             response = await view.post(request)
         self.assertEqual(response.status, 200)
         payload = json.loads(response.body.decode())
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["vendor_profile"], "ts1201_zosung")
-        detect_mock.assert_awaited_once_with(self.hass, "aa:bb:cc:dd:ee:ff")
+        resolve_mock.assert_awaited_once_with(
+            self.hass,
+            hub_id=None,
+            ieee="aa:bb:cc:dd:ee:ff",
+            endpoint_id=2,
+        )
         learn_mock.assert_awaited_once_with(
             self.hass,
+            hub_id=None,
             ieee="aa:bb:cc:dd:ee:ff",
             timeout_s=12,
             endpoint_id=2,
@@ -243,9 +258,16 @@ class TestSignalLogQueryParsing(unittest.IsolatedAsyncioTestCase):
         ).encode()
         view = api.EasyIrSignalLogStartLearnView()
         with patch(
-            "custom_components.easyir.signal_log.api.async_detect_ir_learn_profile",
-            new=AsyncMock(return_value="ts1201_zosung"),
-        ) as detect_mock, patch(
+            "custom_components.easyir.signal_log.api.async_resolve_learn_target",
+            new=AsyncMock(
+                return_value={
+                    "hub_id": None,
+                    "ieee": "aa:bb:cc:dd:ee:ff",
+                    "endpoint_id": 1,
+                    "vendor_profile": "ts1201_zosung",
+                }
+            ),
+        ) as resolve_mock, patch(
             "custom_components.easyir.signal_log.api.resolve_ieee_primary_area_id",
             return_value=None,
         ), patch(
@@ -262,9 +284,15 @@ class TestSignalLogQueryParsing(unittest.IsolatedAsyncioTestCase):
         payload = json.loads(response.body.decode())
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["code"], "QWxhZGRpbjpvcGVuIHNlc2FtZQ==")
-        detect_mock.assert_awaited_once_with(self.hass, "aa:bb:cc:dd:ee:ff")
+        resolve_mock.assert_awaited_once_with(
+            self.hass,
+            hub_id=None,
+            ieee="aa:bb:cc:dd:ee:ff",
+            endpoint_id=1,
+        )
         learn_mock.assert_awaited_once_with(
             self.hass,
+            hub_id=None,
             ieee="aa:bb:cc:dd:ee:ff",
             endpoint_id=1,
             timeout_s=20,
@@ -296,6 +324,24 @@ class TestSignalLogQueryParsing(unittest.IsolatedAsyncioTestCase):
         payload = json.loads(response.body.decode())
         self.assertIn("endpoint_id", payload["message"])
 
+    async def test_start_learn_view_requires_hub_id_or_ieee(self) -> None:
+        api = importlib.import_module("custom_components.easyir.signal_log.api")
+        from homeassistant.components import http
+
+        app = {http.KEY_HASS: self.hass}
+        request = make_mocked_request(
+            "POST",
+            "/api/easyir/signal_log/start_learn",
+            app=app,
+            headers={"Content-Type": "application/json"},
+        )
+        request._read_bytes = json.dumps({"timeout_s": 10}).encode()
+        view = api.EasyIrSignalLogStartLearnView()
+        response = await view.post(request)
+        self.assertEqual(response.status, 400)
+        payload = json.loads(response.body.decode())
+        self.assertIn("hub_id", payload["message"])
+
     async def test_start_learn_view_returns_timeout_payload(self) -> None:
         api = importlib.import_module("custom_components.easyir.signal_log.api")
         from homeassistant.components import http
@@ -312,8 +358,15 @@ class TestSignalLogQueryParsing(unittest.IsolatedAsyncioTestCase):
         ).encode()
         view = api.EasyIrSignalLogStartLearnView()
         with patch(
-            "custom_components.easyir.signal_log.api.async_detect_ir_learn_profile",
-            new=AsyncMock(return_value="ts1201_zosung"),
+            "custom_components.easyir.signal_log.api.async_resolve_learn_target",
+            new=AsyncMock(
+                return_value={
+                    "hub_id": None,
+                    "ieee": "aa:bb:cc:dd:ee:ff",
+                    "endpoint_id": 1,
+                    "vendor_profile": "ts1201_zosung",
+                }
+            ),
         ), patch(
             "custom_components.easyir.signal_log.api.learn_once",
             new=AsyncMock(side_effect=TimeoutError("IR learn mode timeout")),
@@ -339,8 +392,15 @@ class TestSignalLogQueryParsing(unittest.IsolatedAsyncioTestCase):
         ).encode()
         view = api.EasyIrSignalLogStartLearnView()
         with patch(
-            "custom_components.easyir.signal_log.api.async_detect_ir_learn_profile",
-            new=AsyncMock(return_value="ts1201_zosung"),
+            "custom_components.easyir.signal_log.api.async_resolve_learn_target",
+            new=AsyncMock(
+                return_value={
+                    "hub_id": None,
+                    "ieee": "aa:bb:cc:dd:ee:ff",
+                    "endpoint_id": 1,
+                    "vendor_profile": "ts1201_zosung",
+                }
+            ),
         ), patch(
             "custom_components.easyir.signal_log.api.learn_once",
             new=AsyncMock(side_effect=RuntimeError("boom")),
@@ -350,6 +410,58 @@ class TestSignalLogQueryParsing(unittest.IsolatedAsyncioTestCase):
         payload = json.loads(response.body.decode())
         self.assertIn("internal", payload["message"])
         logger_mock.exception.assert_called_once()
+
+    async def test_hubs_view_returns_configured_hubs(self) -> None:
+        api = importlib.import_module("custom_components.easyir.signal_log.api")
+        from homeassistant.components import http
+
+        e1 = type(
+            "Entry",
+            (),
+            {
+                "entry_id": "hub-1",
+                "title": "Living Room Hub",
+                "data": {"ieee": "aa:bb:cc:dd:ee:ff", "endpoint_id": 1},
+            },
+        )()
+        e2 = type(
+            "Entry",
+            (),
+            {
+                "entry_id": "hub-2",
+                "title": "Bedroom Hub",
+                "data": {"ieee": "11:22:33:44:55:66", "endpoint_id": 2},
+            },
+        )()
+        self.hass.config_entries = type(
+            "Cfg",
+            (),
+            {"async_entries": lambda _self, _domain: [e1, e2]},
+        )()
+
+        app = {http.KEY_HASS: self.hass}
+        request = make_mocked_request(
+            "GET",
+            "/api/easyir/signal_log/hubs",
+            app=app,
+        )
+        view = api.EasyIrSignalLogHubsView()
+        with patch(
+            "custom_components.easyir.signal_log.api.async_detect_ir_learn_profile",
+            new=AsyncMock(
+                side_effect=[
+                    "ts1201_zosung",
+                    None,
+                ]
+            ),
+        ):
+            response = await view.get(request)
+        self.assertEqual(response.status, 200)
+        payload = json.loads(response.body.decode())
+        self.assertEqual(len(payload["hubs"]), 2)
+        self.assertEqual(payload["hubs"][0]["hub_id"], "hub-1")
+        self.assertTrue(payload["hubs"][0]["learn_supported"])
+        self.assertFalse(payload["hubs"][1]["learn_supported"])
 
 
 if __name__ == "__main__":

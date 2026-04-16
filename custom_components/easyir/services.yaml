@@ -77,14 +77,19 @@ learn_once:
   name: Learn IR code from hub
   description: Enable IR learn mode on a supported hub, wait for one remote button press, then read learned code from hub attribute.
   fields:
+    hub_id:
+      required: false
+      description: EasyIR hub config entry id. Preferred target selector for Learn.
+      selector:
+        text:
     ieee:
       required: false
-      description: Optional if default IEEE is set via integration UI setup.
+      description: Optional fallback target when hub_id is not provided.
       selector:
         text:
     endpoint_id:
       required: false
-      default: 1
+      description: Optional. If omitted, endpoint from selected hub/config entry is used.
       selector:
         number:
           min: 1
@@ -103,14 +108,19 @@ learn_code:
   name: Learn IR code from hub (legacy alias)
   description: Backward-compatible alias for learn_once.
   fields:
+    hub_id:
+      required: false
+      description: EasyIR hub config entry id. Preferred target selector for Learn.
+      selector:
+        text:
     ieee:
       required: false
-      description: Optional if default IEEE is set via integration UI setup.
+      description: Optional fallback target when hub_id is not provided.
       selector:
         text:
     endpoint_id:
       required: false
-      default: 1
+      description: Optional. If omitted, endpoint from selected hub/config entry is used.
       selector:
         number:
           min: 1

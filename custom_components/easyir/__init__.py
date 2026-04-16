@@ -14,6 +14,7 @@ from homeassistant.helpers import config_validation as cv
 from .config_flow import EasyIrConfigFlow
 from .const import (
     CONF_ENDPOINT_ID,
+    CONF_HUB_ID,
     CONF_IEEE,
     CONF_PROFILE_PATH,
     DEBUG_EVENT_LEARN_ONCE_HANDLER_ENTER,
@@ -116,8 +117,9 @@ SEND_COMMAND_SCHEMA = vol.Schema(
 
 LEARN_ONCE_SCHEMA = vol.Schema(
     {
+        vol.Optional(CONF_HUB_ID): cv.string,
         vol.Optional(CONF_IEEE): cv.string,
-        vol.Optional(CONF_ENDPOINT_ID, default=DEFAULT_ENDPOINT_ID): vol.Coerce(int),
+        vol.Optional(CONF_ENDPOINT_ID): vol.Coerce(int),
         vol.Optional("timeout_s", default=20): vol.All(
             vol.Coerce(int), vol.Range(min=1, max=120)
         ),
@@ -129,8 +131,9 @@ LEARN_ONCE_SCHEMA = vol.Schema(
 
 LEARN_CODE_LEGACY_SCHEMA = vol.Schema(
     {
+        vol.Optional(CONF_HUB_ID): cv.string,
         vol.Optional(CONF_IEEE): cv.string,
-        vol.Optional(CONF_ENDPOINT_ID, default=DEFAULT_ENDPOINT_ID): vol.Coerce(int),
+        vol.Optional(CONF_ENDPOINT_ID): vol.Coerce(int),
         vol.Optional("timeout_seconds", default=20): vol.All(
             vol.Coerce(int), vol.Range(min=1, max=120)
         ),
@@ -227,13 +230,22 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         )
 
     async def handle_learn_once(call: ServiceCall) -> None:
-        ieee = _get_merged_value(call, CONF_IEEE)
-        if not ieee:
-            raise vol.Invalid("Missing required 'ieee' in service data or config entry")
-        endpoint_id = _get_merged_value(call, CONF_ENDPOINT_ID) or TS1201_ENDPOINT_ID
+        hub_id = str(call.data.get(CONF_HUB_ID, "")).strip() or None
+        if hub_id:
+            ieee = call.data.get(CONF_IEEE)
+        else:
+            ieee = _get_merged_value(call, CONF_IEEE)
+        if ieee is not None:
+            ieee = str(ieee).strip() or None
+        if not hub_id and not ieee:
+            raise vol.Invalid(
+                "Missing learn target: provide 'hub_id' or 'ieee' (or configure default entry)"
+            )
+        endpoint_id = call.data.get(CONF_ENDPOINT_ID)
         timeout_s = int(call.data.get("timeout_s") or call.data.get("timeout_seconds") or 20)
         _LOGGER.warning(
-            "EasyIR learn_once handler start ieee=%s endpoint=%s timeout_s=%s",
+            "EasyIR learn_once handler start hub_id=%s ieee=%s endpoint=%s timeout_s=%s",
+            hub_id,
             ieee,
             endpoint_id,
             timeout_s,
@@ -241,15 +253,17 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         hass.bus.async_fire(
             DEBUG_EVENT_LEARN_ONCE_HANDLER_ENTER,
             {
-                "ieee": str(ieee),
-                "endpoint_id": int(endpoint_id),
+                "hub_id": hub_id,
+                "ieee": str(ieee) if ieee else None,
+                "endpoint_id": int(endpoint_id) if endpoint_id is not None else None,
                 "timeout_s": timeout_s,
             },
         )
         await learn_once(
             hass,
-            ieee=str(ieee),
-            endpoint_id=int(endpoint_id),
+            hub_id=hub_id,
+            ieee=str(ieee) if ieee else None,
+            endpoint_id=int(endpoint_id) if endpoint_id is not None else None,
             timeout_s=timeout_s,
         )
 

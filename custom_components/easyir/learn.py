@@ -13,6 +13,7 @@ from homeassistant.helpers import device_registry as dr
 from .command_pool import async_call_pooled_service
 from .const import (
     CONF_IEEE,
+    CONF_HUB_ID,
     DEFAULT_ENDPOINT_ID,
     DOMAIN,
     IR_LEARN_ATTRIBUTE_ID,
@@ -73,6 +74,17 @@ def _entry_for_ieee(hass: HomeAssistant, ieee: str) -> dict[str, Any] | None:
     return None
 
 
+def _entry_for_hub_id(hass: HomeAssistant, hub_id: str) -> dict[str, Any] | None:
+    """Return config entry data for a specific EasyIR hub entry id."""
+    target = str(hub_id).strip()
+    if not target:
+        return None
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        if entry.entry_id == target:
+            return dict(entry.data)
+    return None
+
+
 def _entry_endpoint_id(entry_data: dict[str, Any] | None) -> int:
     if not entry_data:
         return DEFAULT_ENDPOINT_ID
@@ -80,6 +92,50 @@ def _entry_endpoint_id(entry_data: dict[str, Any] | None) -> int:
         return int(entry_data.get("endpoint_id", DEFAULT_ENDPOINT_ID))
     except (TypeError, ValueError):
         return DEFAULT_ENDPOINT_ID
+
+
+async def async_resolve_learn_target(
+    hass: HomeAssistant,
+    *,
+    hub_id: str | None = None,
+    ieee: str | None = None,
+    endpoint_id: int | None = None,
+) -> dict[str, Any]:
+    """Resolve learn target from hub_id/ieee and detect vendor-specific profile."""
+    entry_data_by_hub: dict[str, Any] | None = None
+    if hub_id is not None and str(hub_id).strip():
+        entry_data_by_hub = _entry_for_hub_id(hass, str(hub_id))
+        if entry_data_by_hub is None:
+            raise ValueError(f"Unknown EasyIR hub_id: {hub_id}")
+
+    resolved_ieee = str(ieee or "").strip() or None
+    if entry_data_by_hub is not None:
+        hub_ieee = str(entry_data_by_hub.get(CONF_IEEE, "")).strip() or None
+        if resolved_ieee and hub_ieee:
+            if _normalize_ieee(resolved_ieee) != _normalize_ieee(hub_ieee):
+                raise ValueError("hub_id and ieee refer to different hubs")
+        if resolved_ieee is None:
+            resolved_ieee = hub_ieee
+
+    if not resolved_ieee:
+        raise ValueError("Learn target is required: provide hub_id or ieee")
+
+    if endpoint_id is None:
+        entry_data = entry_data_by_hub or _entry_for_ieee(hass, resolved_ieee)
+        resolved_endpoint_id = _entry_endpoint_id(entry_data)
+    else:
+        resolved_endpoint_id = int(endpoint_id)
+
+    vendor_profile = await async_detect_ir_learn_profile(hass, resolved_ieee)
+    if vendor_profile is None:
+        raise ValueError("No supported learn profile for this IR hub")
+
+    return {
+        CONF_HUB_ID: str(hub_id).strip() if hub_id else None,
+        CONF_IEEE: resolved_ieee,
+        "endpoint_id": resolved_endpoint_id,
+        "vendor_profile": vendor_profile,
+    }
 
 
 async def _issue_irlearn(hass: HomeAssistant, ieee: str, endpoint_id: int, on: bool) -> None:
@@ -336,6 +392,30 @@ def _extract_learn_attr_code(result: Any) -> str | None:
     return None
 
 
+async def async_list_configured_learn_hubs(hass: HomeAssistant) -> list[dict[str, Any]]:
+    """Return configured EasyIR hubs suitable for learn operations."""
+    hubs: list[dict[str, Any]] = []
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        data = dict(entry.data)
+        ieee = str(data.get(CONF_IEEE, "")).strip()
+        if not ieee:
+            continue
+        vendor_profile = await async_detect_ir_learn_profile(hass, ieee)
+        if vendor_profile is None:
+            continue
+        hubs.append(
+            {
+                "hub_id": entry.entry_id,
+                "title": entry.title,
+                "ieee": ieee,
+                "endpoint_id": _entry_endpoint_id(data),
+                "vendor_profile": vendor_profile,
+            }
+        )
+    hubs.sort(key=lambda item: (str(item["title"]).lower(), str(item["hub_id"])))
+    return hubs
+
+
 async def async_read_learned_ir_code(
     hass: HomeAssistant,
     *,
@@ -378,8 +458,9 @@ async def async_read_learned_ir_code(
 async def learn_once(
     hass: HomeAssistant,
     *,
-    ieee: str,
-    endpoint_id: int,
+    ieee: str | None = None,
+    hub_id: str | None = None,
+    endpoint_id: int | None = None,
     timeout_s: int,
     poll_interval_s: float = 0.8,
 ) -> dict[str, Any]:
@@ -391,15 +472,23 @@ async def learn_once(
     - poll last learned attribute,
     - disable IRLearn on success/timeout/failure.
     """
-    vendor_profile = await async_detect_ir_learn_profile(hass, ieee)
+    resolved_target = await async_resolve_learn_target(
+        hass,
+        hub_id=hub_id,
+        ieee=ieee,
+        endpoint_id=endpoint_id,
+    )
+    resolved_ieee = str(resolved_target[CONF_IEEE])
+    resolved_endpoint_id = int(resolved_target["endpoint_id"])
+    vendor_profile = str(resolved_target["vendor_profile"])
     if vendor_profile != VENDOR_PROFILE_TS1201_ZOSUNG:
-        raise ValueError("No supported learn profile for this IR hub")
+        raise ValueError(f"Unsupported learn vendor profile: {vendor_profile}")
     adapter = Ts1201LearnAdapter()
     await adapter.async_start_learning(
         hass,
-        ieee,
+        resolved_ieee,
         timeout_s=timeout_s,
-        endpoint_id=endpoint_id,
+        endpoint_id=resolved_endpoint_id,
     )
     try:
         start = asyncio.get_running_loop().time()
@@ -407,9 +496,12 @@ async def learn_once(
             try:
                 payload = await adapter.async_read_learned_code(
                     hass,
-                    ieee,
-                    endpoint_id=endpoint_id,
+                    resolved_ieee,
+                    endpoint_id=resolved_endpoint_id,
                 )
+                payload[CONF_IEEE] = resolved_ieee
+                payload["endpoint_id"] = resolved_endpoint_id
+                payload[CONF_HUB_ID] = resolved_target.get(CONF_HUB_ID)
                 return payload
             except ValueError:
                 pass
@@ -419,8 +511,8 @@ async def learn_once(
     finally:
         await adapter.async_stop_learning(
             hass,
-            ieee,
-            endpoint_id=endpoint_id,
+            resolved_ieee,
+            endpoint_id=resolved_endpoint_id,
         )
 
 

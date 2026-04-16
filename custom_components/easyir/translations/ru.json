@@ -2,15 +2,19 @@
   "services": {
     "learn_once": {
       "name": "Выучить один IR-код",
-      "description": "Включает режим Learn на IR-хабе и ждёт один код (или до тайм-аута).",
+      "description": "Включает режим Learn на выбранном IR-хабе и ждёт один код (или до тайм-аута).",
       "fields": {
+        "hub_id": {
+          "name": "ID хаба EasyIR",
+          "description": "Предпочтительный способ выбора цели Learn: ID настроенного хаба EasyIR."
+        },
         "ieee": {
           "name": "IEEE устройства",
-          "description": "Необязательно, если задано по умолчанию в интеграции."
+          "description": "Ручной fallback, если hub_id не указан."
         },
         "endpoint_id": {
           "name": "Endpoint",
-          "description": "Endpoint ZHA для IR-кластера."
+          "description": "Необязательный endpoint. Если не задан, берётся из выбранного хаба."
         },
         "timeout_s": {
           "name": "Тайм-аут (секунды)",

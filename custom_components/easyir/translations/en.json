@@ -26,13 +26,17 @@
       "name": "Learn one IR code",
       "description": "Enable learn mode for a configured IR hub and wait for one learned code.",
       "fields": {
+        "hub_id": {
+          "name": "EasyIR hub",
+          "description": "Optional EasyIR hub config entry id. If set, learn runs via this hub-specific profile."
+        },
         "ieee": {
           "name": "IEEE",
-          "description": "Optional if default IEEE is set in the integration entry."
+          "description": "Optional fallback when hub_id is not provided."
         },
         "endpoint_id": {
           "name": "Endpoint id",
-          "description": "Optional endpoint id (default 1)."
+          "description": "Optional endpoint override. If omitted, endpoint from selected hub/default entry is used."
         },
         "timeout_s": {
           "name": "Timeout (seconds)",
