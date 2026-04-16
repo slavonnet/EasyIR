@@ -137,22 +137,47 @@ async def _issue_irlearn(hass: HomeAssistant, ieee: str, endpoint_id: int, on: b
 
 
 async def _read_last_learned(hass: HomeAssistant, ieee: str, endpoint_id: int) -> str | None:
-    result = await async_call_pooled_service(
-        hass,
-        ieee=ieee,
-        domain=ZHA_DOMAIN,
-        service="read_zigbee_cluster_attributes",
-        data={
-            "ieee": ieee,
-            "endpoint_id": endpoint_id,
-            "cluster_id": TS1201_CLUSTER_ID,
-            "cluster_type": TS1201_CLUSTER_TYPE,
-            "attribute": [TS1201_LAST_LEARNED_ATTR_ID],
-        },
-        return_response=True,
-        dedupe=False,
-        priority=1,
-    )
+    payload = {
+        "ieee": ieee,
+        "endpoint_id": endpoint_id,
+        "cluster_id": TS1201_CLUSTER_ID,
+        "cluster_type": TS1201_CLUSTER_TYPE,
+        "attribute": [TS1201_LAST_LEARNED_ATTR_ID],
+    }
+    try:
+        result = await async_call_pooled_service(
+            hass,
+            ieee=ieee,
+            domain=ZHA_DOMAIN,
+            service="read_zigbee_cluster_attributes",
+            data=payload,
+            return_response=True,
+            dedupe=False,
+            priority=1,
+        )
+    except Exception as err:
+        # HA/ZHA versions differ: some don't expose read_zigbee_cluster_attributes.
+        # Fallback to generic issue_zigbee_cluster_command read-attributes.
+        if "ServiceNotFound" not in repr(err):
+            raise
+        result = await async_call_pooled_service(
+            hass,
+            ieee=ieee,
+            domain=ZHA_DOMAIN,
+            service=ZHA_SERVICE,
+            data={
+                "ieee": ieee,
+                "endpoint_id": endpoint_id,
+                "cluster_id": TS1201_CLUSTER_ID,
+                "cluster_type": TS1201_CLUSTER_TYPE,
+                "command": 0,
+                "command_type": TS1201_COMMAND_TYPE,
+                "params": {"attributes": [TS1201_LAST_LEARNED_ATTR_ID]},
+            },
+            return_response=True,
+            dedupe=False,
+            priority=1,
+        )
     if not isinstance(result, dict):
         return None
     success = result.get("success")

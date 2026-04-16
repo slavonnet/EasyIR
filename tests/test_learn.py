@@ -132,6 +132,51 @@ class TestLearnFlow(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["status"], "learning")
         self.assertEqual(hass.calls[0]["data"]["endpoint_id"], 2)
 
+    async def test_read_last_learned_falls_back_when_read_service_missing(self) -> None:
+        class _ServiceNotFound(Exception):
+            pass
+
+        class _FallbackServices(_FakeServices):
+            async def async_call(  # type: ignore[override]
+                self,
+                domain: str,
+                service: str,
+                data: dict,
+                blocking: bool = True,
+                return_response: bool = False,
+            ):
+                self._calls.append(
+                    {
+                        "domain": domain,
+                        "service": service,
+                        "data": dict(data),
+                        "blocking": blocking,
+                        "return_response": return_response,
+                    }
+                )
+                if service == "read_zigbee_cluster_attributes":
+                    raise _ServiceNotFound("Action not found")
+                return {"success": {0: "ABC123"}}
+
+        hass = _FakeHass(responses=[])
+        hass.services = _FallbackServices(hass.calls, responses=[])
+
+        payload = await learn_module.learn_once(
+            hass,
+            ieee="aa:bb:cc",
+            endpoint_id=1,
+            timeout_s=1,
+            poll_interval_s=0.01,
+        )
+
+        self.assertEqual(payload["code"], "ABC123")
+        self.assertGreaterEqual(len(hass.calls), 2)
+        self.assertEqual(hass.calls[0]["service"], ZHA_SERVICE)
+        self.assertEqual(hass.calls[1]["service"], "read_zigbee_cluster_attributes")
+        self.assertEqual(hass.calls[2]["service"], ZHA_SERVICE)
+        self.assertEqual(hass.calls[2]["data"]["command"], 0)
+        self.assertEqual(hass.calls[2]["data"]["params"], {"attributes": [0]})
+
 
 if __name__ == "__main__":
     unittest.main()
