@@ -46,13 +46,18 @@ class _FakeHass:
         self._calls: list[dict] = []
         self.services = _FakeServices(self._calls, responses=responses)
         self.data = {}
+        default_entry = type(
+            "Entry",
+            (),
+            {"entry_id": "hub-default", "data": {"ieee": "aa:bb:cc", "endpoint_id": 1}},
+        )()
         self.config_entries = type(
             "Cfg",
             (),
             {
                 "async_entries": (
                     lambda _self, _domain: [
-                        type("Entry", (), {"data": {"ieee": "aa:bb:cc", "endpoint_id": 1}})()
+                        default_entry
                     ]
                 )
             },
@@ -113,12 +118,64 @@ class TestLearnFlow(unittest.IsolatedAsyncioTestCase):
         payload = await learn_module.learn_once(
             hass,
             ieee="aa:bb:cc",
-            endpoint_id=1,
             timeout_s=5,
             poll_interval_s=0.01,
         )
         self.assertEqual(payload["code"], "ABC")
         self.assertEqual(payload["vendor_profile"], learn_module.VENDOR_PROFILE_TS1201_ZOSUNG)
+        self.assertEqual(payload["endpoint_id"], 1)
+        self.assertEqual(payload["hub_id"], None)
+
+    async def test_learn_once_resolves_target_by_hub_id(self) -> None:
+        hass = _FakeHass(
+            responses=[
+                {},
+                {"success": {0: "CODE_BY_HUB"}},
+            ]
+        )
+        hub_entry = type(
+            "Entry",
+            (),
+            {"entry_id": "hub-1", "data": {"ieee": "11:22:33", "endpoint_id": 5}},
+        )()
+        hass.config_entries = type(
+            "Cfg",
+            (),
+            {"async_entries": lambda _self, _domain: [hub_entry]},
+        )()
+
+        payload = await learn_module.learn_once(
+            hass,
+            hub_id="hub-1",
+            timeout_s=5,
+            poll_interval_s=0.01,
+        )
+        self.assertEqual(payload["code"], "CODE_BY_HUB")
+        self.assertEqual(payload["ieee"], "11:22:33")
+        self.assertEqual(payload["endpoint_id"], 5)
+        self.assertEqual(payload["hub_id"], "hub-1")
+        self.assertEqual(hass.calls[0]["data"]["ieee"], "11:22:33")
+        self.assertEqual(hass.calls[0]["data"]["endpoint_id"], 5)
+
+    async def test_resolve_learn_target_rejects_conflicting_hub_and_ieee(self) -> None:
+        hass = _FakeHass()
+        hub_entry = type(
+            "Entry",
+            (),
+            {"entry_id": "hub-1", "data": {"ieee": "11:22:33", "endpoint_id": 5}},
+        )()
+        hass.config_entries = type(
+            "Cfg",
+            (),
+            {"async_entries": lambda _self, _domain: [hub_entry]},
+        )()
+        with self.assertRaises(ValueError):
+            await learn_module.async_resolve_learn_target(
+                hass,
+                hub_id="hub-1",
+                ieee="aa:bb:cc",
+                endpoint_id=None,
+            )
 
     async def test_async_start_ir_learning_respects_explicit_endpoint(self) -> None:
         hass = _FakeHass(responses=[{}])

@@ -5,6 +5,7 @@ class EasyIrSignalLogPanel extends HTMLElement {
     this._hass = null;
     this._offset = 0;
     this._loading = false;
+    this._learnHubs = [];
     this.attachShadow({ mode: "open" });
   }
 
@@ -14,6 +15,7 @@ class EasyIrSignalLogPanel extends HTMLElement {
       this._initialized = true;
       this._render();
       this._bindActions();
+      this._loadLearnHubs();
       this._load(false);
     }
   }
@@ -105,7 +107,11 @@ class EasyIrSignalLogPanel extends HTMLElement {
       </style>
       <h2>EasyIR Signal Log</h2>
       <div class="row">
-        <label for="learn-ieee">Learn IEEE</label>
+        <label for="learn-hub">Learn hub</label>
+        <select id="learn-hub">
+          <option value="">manual IEEE input</option>
+        </select>
+        <label for="learn-ieee">IEEE</label>
         <input id="learn-ieee" type="text" placeholder="aa:bb:cc:dd:ee:ff" />
         <label for="learn-endpoint">Endpoint</label>
         <input id="learn-endpoint" type="number" min="1" max="240" value="1" />
@@ -145,6 +151,9 @@ class EasyIrSignalLogPanel extends HTMLElement {
   }
 
   _bindActions() {
+    this.shadowRoot.getElementById("learn-hub").addEventListener("change", () => {
+      this._onLearnHubChange();
+    });
     this.shadowRoot.getElementById("start-learn").addEventListener("click", () => {
       this._startLearn();
     });
@@ -198,15 +207,87 @@ class EasyIrSignalLogPanel extends HTMLElement {
   }
 
   _learnPayload() {
+    const selectedHubId = this.shadowRoot.getElementById("learn-hub").value.trim();
     const ieee = this.shadowRoot.getElementById("learn-ieee").value.trim();
     const endpointRaw = Number.parseInt(this.shadowRoot.getElementById("learn-endpoint").value || "1", 10);
     const timeoutRaw = Number.parseInt(this.shadowRoot.getElementById("learn-timeout").value || "20", 10);
-    if (!ieee) {
-      throw new Error("Learn IEEE is required");
+    if (!selectedHubId && !ieee) {
+      throw new Error("Learn target is required: select hub or enter IEEE");
     }
-    const endpoint_id = Number.isNaN(endpointRaw) ? 1 : Math.max(1, Math.min(240, endpointRaw));
+    const endpoint_id = Number.isNaN(endpointRaw) ? null : Math.max(1, Math.min(240, endpointRaw));
     const timeout_s = Number.isNaN(timeoutRaw) ? 20 : Math.max(5, Math.min(120, timeoutRaw));
-    return { ieee, endpoint_id, timeout_s };
+    const payload = { timeout_s };
+    if (selectedHubId) {
+      payload.hub_id = selectedHubId;
+    }
+    if (ieee) {
+      payload.ieee = ieee;
+    }
+    if (endpoint_id !== null) {
+      payload.endpoint_id = endpoint_id;
+    }
+    return payload;
+  }
+
+  _hubLabel(hub) {
+    const title = hub && hub.title ? String(hub.title) : "EasyIR hub";
+    const ieee = hub && hub.ieee ? String(hub.ieee) : "";
+    const profile = hub && hub.vendor_profile ? `, ${hub.vendor_profile}` : "";
+    return ieee ? `${title} (${ieee}${profile})` : `${title}${profile}`;
+  }
+
+  _renderLearnHubOptions() {
+    const select = this.shadowRoot.getElementById("learn-hub");
+    if (!select) {
+      return;
+    }
+    const current = select.value;
+    select.innerHTML = `<option value="">manual IEEE input</option>`;
+    for (const hub of this._learnHubs) {
+      if (!hub || !hub.learn_supported) {
+        continue;
+      }
+      const option = document.createElement("option");
+      option.value = String(hub.hub_id || "");
+      option.textContent = this._hubLabel(hub);
+      select.appendChild(option);
+    }
+    if (current && [...select.options].some((opt) => opt.value === current)) {
+      select.value = current;
+    }
+  }
+
+  _onLearnHubChange() {
+    const select = this.shadowRoot.getElementById("learn-hub");
+    const hubId = select ? select.value.trim() : "";
+    if (!hubId) {
+      return;
+    }
+    const hub = this._learnHubs.find((item) => String(item.hub_id) === hubId);
+    if (!hub) {
+      return;
+    }
+    if (hub.ieee) {
+      this.shadowRoot.getElementById("learn-ieee").value = String(hub.ieee);
+    }
+    if (hub.endpoint_id !== null && hub.endpoint_id !== undefined) {
+      this.shadowRoot.getElementById("learn-endpoint").value = String(hub.endpoint_id);
+    }
+  }
+
+  async _loadLearnHubs() {
+    if (!this._hass) {
+      return;
+    }
+    try {
+      const data = await this._hass.callApi("GET", "easyir/signal_log/hubs");
+      this._learnHubs = Array.isArray(data && data.hubs) ? data.hubs : [];
+      this._renderLearnHubOptions();
+      this._onLearnHubChange();
+    } catch (_err) {
+      this._learnHubs = [];
+      this._renderLearnHubOptions();
+    }
   }
 
   _extractErrorMessage(err) {
@@ -252,9 +333,10 @@ class EasyIrSignalLogPanel extends HTMLElement {
     try {
       const result = await this._hass.callApi("POST", "easyir/signal_log/start_learn", payload);
       const vendor = result && result.vendor_profile ? ` vendor=${result.vendor_profile}` : "";
+      const hub = result && result.hub_id ? ` hub=${result.hub_id}` : "";
       const codeLen = result && result.code ? ` code_len=${String(result.code).length}` : "";
       const source = result && result.source_encoding ? ` source=${result.source_encoding}` : "";
-      this._setStatusOk(`Learn completed.${vendor}${source}${codeLen}`);
+      this._setStatusOk(`Learn completed.${hub}${vendor}${source}${codeLen}`);
       this._offset = 0;
       await this._load(false);
     } catch (err) {
