@@ -120,6 +120,18 @@ class TestLearnFlow(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["code"], "ABC")
         self.assertEqual(payload["vendor_profile"], learn_module.VENDOR_PROFILE_TS1201_ZOSUNG)
 
+    async def test_async_start_ir_learning_respects_explicit_endpoint(self) -> None:
+        hass = _FakeHass(responses=[{}])
+        result = await learn_module.async_start_ir_learning(
+            hass,
+            ieee="aa:bb:cc",
+            vendor_profile=learn_module.VENDOR_PROFILE_TS1201_ZOSUNG,
+            timeout_s=7,
+            endpoint_id=2,
+        )
+        self.assertEqual(result["status"], "learning")
+        self.assertEqual(hass.calls[0]["data"]["endpoint_id"], 2)
+
 
 if __name__ == "__main__":
     unittest.main()
