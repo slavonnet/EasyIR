@@ -296,6 +296,61 @@ class TestSignalLogQueryParsing(unittest.IsolatedAsyncioTestCase):
         payload = json.loads(response.body.decode())
         self.assertIn("endpoint_id", payload["message"])
 
+    async def test_start_learn_view_returns_timeout_payload(self) -> None:
+        api = importlib.import_module("custom_components.easyir.signal_log.api")
+        from homeassistant.components import http
+
+        app = {http.KEY_HASS: self.hass}
+        request = make_mocked_request(
+            "POST",
+            "/api/easyir/signal_log/start_learn",
+            app=app,
+            headers={"Content-Type": "application/json"},
+        )
+        request._read_bytes = json.dumps(
+            {"ieee": "aa:bb:cc:dd:ee:ff", "endpoint_id": 1, "timeout_s": 5}
+        ).encode()
+        view = api.EasyIrSignalLogStartLearnView()
+        with patch(
+            "custom_components.easyir.signal_log.api.async_detect_ir_learn_profile",
+            new=AsyncMock(return_value="ts1201_zosung"),
+        ), patch(
+            "custom_components.easyir.signal_log.api.learn_once",
+            new=AsyncMock(side_effect=TimeoutError("IR learn mode timeout")),
+        ):
+            response = await view.post(request)
+        self.assertEqual(response.status, 408)
+        payload = json.loads(response.body.decode())
+        self.assertIn("timeout", payload["message"])
+
+    async def test_start_learn_view_logs_and_returns_500_on_unexpected_error(self) -> None:
+        api = importlib.import_module("custom_components.easyir.signal_log.api")
+        from homeassistant.components import http
+
+        app = {http.KEY_HASS: self.hass}
+        request = make_mocked_request(
+            "POST",
+            "/api/easyir/signal_log/start_learn",
+            app=app,
+            headers={"Content-Type": "application/json"},
+        )
+        request._read_bytes = json.dumps(
+            {"ieee": "aa:bb:cc:dd:ee:ff", "endpoint_id": 1, "timeout_s": 5}
+        ).encode()
+        view = api.EasyIrSignalLogStartLearnView()
+        with patch(
+            "custom_components.easyir.signal_log.api.async_detect_ir_learn_profile",
+            new=AsyncMock(return_value="ts1201_zosung"),
+        ), patch(
+            "custom_components.easyir.signal_log.api.learn_once",
+            new=AsyncMock(side_effect=RuntimeError("boom")),
+        ), patch("custom_components.easyir.signal_log.api._LOGGER") as logger_mock:
+            response = await view.post(request)
+        self.assertEqual(response.status, 500)
+        payload = json.loads(response.body.decode())
+        self.assertIn("internal", payload["message"])
+        logger_mock.exception.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -217,7 +217,11 @@ class EasyIrSignalLogPanel extends HTMLElement {
       return err;
     }
     if (err.message) {
-      return String(err.message);
+      let msg = String(err.message);
+      if (err.error && typeof err.error === "string") {
+        msg += `: ${err.error}`;
+      }
+      return msg;
     }
     if (err.error && typeof err.error === "string") {
       return err.error;
