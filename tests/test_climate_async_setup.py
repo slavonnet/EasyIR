@@ -11,11 +11,13 @@ from custom_components.easyir.climate import async_setup_entry
 class _FakeEntry:
     def __init__(self) -> None:
         self.data = {
-            "ieee": "aa:bb:cc:dd",
+            "entry_kind": "remote",
+            "hub_entry_id": "hub-1",
+            "hub_ids": ["hub-1"],
             "profile_path": "/tmp/profile.json",
-            "endpoint_id": 1,
         }
         self.entry_id = "entry-1"
+        self.title = "Remote demo"
 
 
 class _FakeHass:
@@ -26,6 +28,25 @@ class _FakeHass:
                 "pilot": False,
             }
         )
+        hub = type(
+            "HubEntry",
+            (),
+            {
+                "entry_id": "hub-1",
+                "title": "Hub",
+                "data": {
+                    "entry_kind": "hub",
+                    "ieee": "aa:bb:cc:dd",
+                    "endpoint_id": 1,
+                    "transport": "ts1201_zha",
+                },
+            },
+        )()
+        self.config_entries = type(
+            "Cfg",
+            (),
+            {"async_entries": lambda _self, _domain: [hub]},
+        )()
 
 
 class TestClimateAsyncSetup(unittest.IsolatedAsyncioTestCase):
