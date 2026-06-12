@@ -12,7 +12,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import CONF_PROFILE_PATH, CONF_REMOTE_NAME, DOMAIN, ENTRY_KIND_REMOTE
 from .hub_registry import entry_kind, hub_entries_for_remote, primary_hub_entry, remote_display_name
-from .remote_buttons import RemoteButtonSpec, list_remote_button_specs
+from .remote_buttons import ButtonCommandKind, RemoteButtonSpec, list_remote_button_specs
 from .remote_events import async_fire_button_pressed, async_send_profile_to_hubs
 
 
@@ -58,10 +58,13 @@ class EasyIrRemoteButton(ButtonEntity):
         )
         self._attr_extra_state_attributes = {
             "button_key": spec.key,
+            "command_kind": spec.kind.value,
             "remote_entry_id": entry.entry_id,
             "hub_entry_ids": [h.entry_id for h in hub_entries_for_remote(hass, entry)],
             "pressed": False,
         }
+        if spec.feature_key:
+            self._attr_extra_state_attributes["feature_key"] = spec.feature_key
 
     @property
     def spec(self) -> RemoteButtonSpec:
@@ -102,12 +105,27 @@ class EasyIrRemoteButton(ButtonEntity):
             entity_id=self.entity_id,
         )
         if send_ir and not state_change_only:
+            hvac_mode = self._spec.hvac_mode
+            fan_mode = self._spec.fan_mode
+            temperature = self._spec.temperature
+            if self._spec.kind == ButtonCommandKind.FEATURE_COMMAND:
+                hvac_mode = None
+                fan_mode = None
+                temperature = None
             await async_send_profile_to_hubs(
                 self.hass,
                 remote_entry=self._entry,
                 action=self._spec.action,
-                hvac_mode=self._spec.hvac_mode,
-                fan_mode=self._spec.fan_mode,
-                temperature=self._spec.temperature,
+                hvac_mode=hvac_mode,
+                fan_mode=fan_mode,
+                temperature=temperature,
                 entity_id=self.entity_id,
             )
+            if self._spec.feature_key and self._spec.action.endswith("_on"):
+                attrs = dict(self._attr_extra_state_attributes or {})
+                attrs[f"feature_{self._spec.feature_key}_on"] = True
+                self._attr_extra_state_attributes = attrs
+            elif self._spec.feature_key and self._spec.action.endswith("_off"):
+                attrs = dict(self._attr_extra_state_attributes or {})
+                attrs[f"feature_{self._spec.feature_key}_on"] = False
+                self._attr_extra_state_attributes = attrs
