@@ -33,7 +33,7 @@ class MockIrHubTransport:
         root = hass.data.setdefault(DOMAIN, {})
         calls: list[dict[str, Any]] = root.setdefault(_MOCK_CALLS_KEY, [])
         calls.append(record)
-        _LOGGER.info(
+        _LOGGER.warning(
             "Mock IR hub send ieee=%s endpoint=%s code_len=%s code=%s",
             ctx.ieee,
             ctx.endpoint_id,
