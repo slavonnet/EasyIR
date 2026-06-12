@@ -26,13 +26,11 @@ from .const import (
     CONF_PROFILE_CHOICE,
     CONF_PROFILE_PATH,
     CONF_REMOTE_NAME,
-    CONF_TRANSPORT,
     DEFAULT_ENDPOINT_ID,
     DOMAIN,
     PARENT_ENTRY_UNIQUE_ID,
     SUBENTRY_TYPE_HUB,
     SUBENTRY_TYPE_REMOTE,
-    TRANSPORT_TS1201_ZHA,
     ZHA_DOMAIN,
 )
 from .endpoint import endpoint_for_ieee, endpoint_for_zha_device
@@ -51,6 +49,85 @@ MENU_MANUAL = "manual"
 
 def _ieee_from_zha_device(device: dr.DeviceEntry) -> str | None:
     return ieee_from_zha_device(device)
+
+
+def _area_id_from_input(user_input: dict[str, Any]) -> str | None:
+    area_id = user_input.get(CONF_AREA_ID)
+    if area_id is None:
+        return None
+    area_str = str(area_id).strip()
+    return area_str or None
+
+
+def _default_name_for_device(device: dr.DeviceEntry | None, ieee: str | None = None) -> str:
+    if device is not None:
+        return device.name_by_user or device.name or ""
+    if ieee:
+        return f"IR Hub {ieee}"
+    return "IR Hub"
+
+
+def _combined_hub_pick_schema(
+    *,
+    discovered: list[tuple[str, str]],
+    manual_label: str,
+    default_pick: str | None = None,
+    default_name: str = "",
+) -> vol.Schema:
+    """One form: hub + name + room."""
+    select_options = [{"value": dev_id, "label": label} for dev_id, label in discovered]
+    select_options.append({"value": MENU_MANUAL, "label": manual_label})
+    pick_default = default_pick or (discovered[0][0] if len(discovered) == 1 else None)
+    fields: dict[vol.Marker, Any] = {
+        vol.Required(CONF_HUB_NAME, default=default_name): selector.TextSelector(),
+        vol.Optional(CONF_AREA_ID): selector.AreaSelector(),
+    }
+    if pick_default is not None:
+        fields[vol.Required(CONF_HUB_PICK, default=pick_default)] = selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=select_options,
+                mode=selector.SelectSelectorMode.DROPDOWN,
+            )
+        )
+    else:
+        fields[vol.Required(CONF_HUB_PICK)] = selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=select_options,
+                mode=selector.SelectSelectorMode.DROPDOWN,
+            )
+        )
+    return vol.Schema(fields)
+
+
+def _manual_hub_schema(*, default_name: str = "") -> vol.Schema:
+    return vol.Schema(
+        {
+            vol.Required(CONF_ZHA_DEVICE): selector.DeviceSelector(
+                selector.DeviceSelectorConfig(
+                    integration=ZHA_DOMAIN,
+                    filter=[
+                        {
+                            "integration": ZHA_DOMAIN,
+                            "model": "TS1201",
+                        }
+                    ],
+                )
+            ),
+            vol.Required(CONF_HUB_NAME, default=default_name): selector.TextSelector(),
+            vol.Optional(CONF_AREA_ID): selector.AreaSelector(),
+        }
+    )
+
+
+def _resolve_hub_from_device(
+    hass: Any, device: dr.DeviceEntry
+) -> tuple[str, str, int] | None:
+    ieee = _ieee_from_zha_device(device)
+    if ieee is None:
+        return None
+    name = _default_name_for_device(device, ieee)
+    endpoint_id = endpoint_for_zha_device(device)
+    return ieee, name, endpoint_id
 
 
 class EasyIrConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -81,89 +158,57 @@ class EasyIrConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_integration_discovery(
         self, discovery_info: dict[str, Any]
     ) -> FlowResult:
-        """First-time setup from discovered TS1201."""
-        return await self._async_begin_hub_from_discovery(discovery_info)
-
-    async def async_step_user(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """First integration setup: hub + room + name, then EasyIR page."""
-        if self.hass.config_entries.async_entries(DOMAIN):
-            return self.async_abort(reason="already_configured")
-        if not self.hass.config_entries.async_entries(ZHA_DOMAIN):
-            return self.async_abort(reason="zha_not_configured")
-        if user_input is not None and CONF_HUB_PICK in user_input:
-            return await self._async_step_pick_hub(user_input)
-        return await self._async_step_pick_hub(user_input)
-
-    async def async_step_pick_hub(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        return await self._async_step_pick_hub(user_input)
-
-    async def _async_begin_hub_from_discovery(
-        self, discovery_info: dict[str, Any]
-    ) -> FlowResult:
+        """First-time setup from discovered TS1201 — one step (name + room)."""
         device_id = str(discovery_info.get("device_id", "")).strip()
         ieee = str(discovery_info.get("ieee", "")).strip() or None
         device_reg = dr.async_get(self.hass)
-        if device_id:
-            device = device_reg.async_get(device_id)
-            if device is not None:
-                ieee = ieee or _ieee_from_zha_device(device)
-                self._hub_device_name = device.name_by_user or device.name
+        device = device_reg.async_get(device_id) if device_id else None
+        if device is not None:
+            ieee = ieee or _ieee_from_zha_device(device)
+            self._hub_device_name = _default_name_for_device(device, ieee)
         if ieee is None:
             return self.async_abort(reason="unknown_ieee")
         self._hub_ieee = ieee
         self._hub_endpoint_id = endpoint_for_ieee(self.hass, ieee)
-        await self.async_set_unique_id(ieee.lower().replace(" ", ""))
-        self._abort_if_unique_id_configured()
-        return await self.async_step_hub_setup()
+        return await self.async_step_user(user_input=None, from_discovery=True)
 
-    async def _async_step_pick_hub(
-        self, user_input: dict[str, Any] | None
+    async def async_step_user(
+        self,
+        user_input: dict[str, Any] | None = None,
+        from_discovery: bool = False,
     ) -> FlowResult:
-        discovered = list_onboarding_hub_choices(self.hass)
-        if not discovered:
-            return await self.async_step_hub_manual()
+        """First integration setup: hub + name + room in one step."""
+        if self.hass.config_entries.async_entries(DOMAIN):
+            return self.async_abort(reason="already_configured")
+        if not self.hass.config_entries.async_entries(ZHA_DOMAIN):
+            return self.async_abort(reason="zha_not_configured")
 
-        if user_input is not None:
-            pick = str(user_input.get(CONF_HUB_PICK, "")).strip()
-            if pick == MENU_MANUAL:
-                return await self.async_step_hub_manual()
-            device_reg = dr.async_get(self.hass)
-            device = device_reg.async_get(pick)
-            if device is None:
-                return self.async_abort(reason="invalid_device")
-            ieee = _ieee_from_zha_device(device)
-            if ieee is None:
-                return self.async_abort(reason="unknown_ieee")
-            self._hub_ieee = ieee
-            self._hub_device_name = device.name_by_user or device.name
-            self._hub_endpoint_id = endpoint_for_zha_device(device)
-            await self.async_set_unique_id(ieee.lower().replace(" ", ""))
-            self._abort_if_unique_id_configured()
-            return await self.async_step_hub_setup()
+        if self._hub_ieee is not None:
+            default_name = self._hub_device_name or f"IR Hub {self._hub_ieee}"
+            if user_input is not None:
+                return await self._async_create_parent_with_hub(
+                    ieee=self._hub_ieee,
+                    endpoint_id=self._hub_endpoint_id,
+                    hub_name=str(user_input.get(CONF_HUB_NAME, "")).strip() or default_name,
+                    area_id=_area_id_from_input(user_input),
+                )
+            return self.async_show_form(
+                step_id="user",
+                data_schema=vol.Schema(
+                    {
+                        vol.Required(CONF_HUB_NAME, default=default_name): selector.TextSelector(),
+                        vol.Optional(CONF_AREA_ID): selector.AreaSelector(),
+                    }
+                ),
+                description_placeholders={"hub_name": default_name},
+            )
 
-        manual_label = await self._async_manual_hub_pick_label()
-        select_options = [
-            {"value": dev_id, "label": label} for dev_id, label in discovered
-        ]
-        select_options.append({"value": MENU_MANUAL, "label": manual_label})
-        return self.async_show_form(
-            step_id="pick_hub",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_HUB_PICK): selector.SelectSelector(
-                        selector.SelectSelectorConfig(
-                            options=select_options,
-                            mode=selector.SelectSelectorMode.DROPDOWN,
-                        )
-                    ),
-                }
-            ),
-            description_placeholders={"count": str(len(discovered))},
-        )
+        return await self._async_step_combined_hub(user_input)
+
+    async def async_step_pick_hub(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        return await self._async_step_combined_hub(user_input)
 
     async def async_step_hub_manual(
         self, user_input: dict[str, Any] | None = None
@@ -175,77 +220,98 @@ class EasyIrConfigFlow(ConfigFlow, domain=DOMAIN):
             if device is None:
                 errors["base"] = "invalid_device"
             else:
-                ieee = _ieee_from_zha_device(device)
-                if ieee is None or ieee == "":
+                resolved = _resolve_hub_from_device(self.hass, device)
+                if resolved is None:
                     errors["base"] = "unknown_ieee"
                 else:
-                    self._hub_ieee = ieee
-                    self._hub_device_name = device.name_by_user or device.name
-                    self._hub_endpoint_id = endpoint_for_zha_device(device)
+                    ieee, default_name, endpoint_id = resolved
                     await self.async_set_unique_id(ieee.lower().replace(" ", ""))
                     self._abort_if_unique_id_configured()
-                    return await self.async_step_hub_setup()
+                    hub_name = str(user_input.get(CONF_HUB_NAME, "")).strip() or default_name
+                    return await self._async_create_parent_with_hub(
+                        ieee=ieee,
+                        endpoint_id=endpoint_id,
+                        hub_name=hub_name,
+                        area_id=_area_id_from_input(user_input),
+                    )
 
         return self.async_show_form(
             step_id="hub_manual",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_ZHA_DEVICE): selector.DeviceSelector(
-                        selector.DeviceSelectorConfig(
-                            integration=ZHA_DOMAIN,
-                            filter=[
-                                {
-                                    "integration": ZHA_DOMAIN,
-                                    "model": "TS1201",
-                                }
-                            ],
-                        )
-                    ),
-                }
-            ),
+            data_schema=_manual_hub_schema(),
             errors=errors,
         )
 
-    async def async_step_hub_setup(
-        self, user_input: dict[str, Any] | None = None
+    async def _async_step_combined_hub(
+        self, user_input: dict[str, Any] | None
     ) -> FlowResult:
-        """Hub name and room in one step; creates parent + first hub subentry."""
-        if self._hub_ieee is None:
-            return self.async_abort(reason="unknown_ieee")
+        discovered = list_onboarding_hub_choices(self.hass)
+        if not discovered:
+            return await self.async_step_hub_manual(user_input)
 
-        default_name = self._hub_device_name or f"IR Hub {self._hub_ieee}"
         if user_input is not None:
+            pick = str(user_input.get(CONF_HUB_PICK, "")).strip()
+            if pick == MENU_MANUAL:
+                return await self.async_step_hub_manual()
+            device_reg = dr.async_get(self.hass)
+            device = device_reg.async_get(pick)
+            if device is None:
+                return self.async_abort(reason="invalid_device")
+            resolved = _resolve_hub_from_device(self.hass, device)
+            if resolved is None:
+                return self.async_abort(reason="unknown_ieee")
+            ieee, default_name, endpoint_id = resolved
+            await self.async_set_unique_id(ieee.lower().replace(" ", ""))
+            self._abort_if_unique_id_configured()
             hub_name = str(user_input.get(CONF_HUB_NAME, "")).strip() or default_name
-            area_id = user_input.get(CONF_AREA_ID)
-            area_str = str(area_id).strip() if area_id else None
-            ieee_norm = self._hub_ieee.lower().replace(" ", "")
-            await self.async_set_unique_id(PARENT_ENTRY_UNIQUE_ID)
-            return self.async_create_entry(
-                title="EasyIR",
-                data={},
-                subentries=[
-                    {
-                        "subentry_type": SUBENTRY_TYPE_HUB,
-                        "title": hub_name,
-                        "unique_id": ieee_norm,
-                        "data": hub_subentry_data(
-                            ieee=self._hub_ieee,
-                            endpoint_id=self._hub_endpoint_id,
-                            area_id=area_str,
-                        ),
-                    }
-                ],
+            return await self._async_create_parent_with_hub(
+                ieee=ieee,
+                endpoint_id=endpoint_id,
+                hub_name=hub_name,
+                area_id=_area_id_from_input(user_input),
             )
 
+        manual_label = await self._async_manual_hub_pick_label()
+        default_pick = discovered[0][0] if len(discovered) == 1 else None
+        default_name = ""
+        if default_pick:
+            device = dr.async_get(self.hass).async_get(default_pick)
+            default_name = _default_name_for_device(device)
         return self.async_show_form(
-            step_id="hub_setup",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_HUB_NAME, default=default_name): selector.TextSelector(),
-                    vol.Optional(CONF_AREA_ID): selector.AreaSelector(),
-                }
+            step_id="user",
+            data_schema=_combined_hub_pick_schema(
+                discovered=discovered,
+                manual_label=manual_label,
+                default_pick=default_pick,
+                default_name=default_name,
             ),
-            description_placeholders={"hub_name": default_name},
+            description_placeholders={"count": str(len(discovered))},
+        )
+
+    async def _async_create_parent_with_hub(
+        self,
+        *,
+        ieee: str,
+        endpoint_id: int,
+        hub_name: str,
+        area_id: str | None,
+    ) -> FlowResult:
+        ieee_norm = ieee.lower().replace(" ", "")
+        await self.async_set_unique_id(PARENT_ENTRY_UNIQUE_ID)
+        return self.async_create_entry(
+            title="EasyIR",
+            data={},
+            subentries=[
+                {
+                    "subentry_type": SUBENTRY_TYPE_HUB,
+                    "title": hub_name,
+                    "unique_id": ieee_norm,
+                    "data": hub_subentry_data(
+                        ieee=ieee,
+                        endpoint_id=endpoint_id,
+                        area_id=area_id,
+                    ),
+                }
+            ],
         )
 
     async def _async_manual_hub_pick_label(self) -> str:
@@ -285,7 +351,25 @@ class _HubPickMixin:
             "Select ZHA device manually",
         )
 
-    async def _async_step_pick_hub_subentry(
+    async def _async_create_hub_subentry(
+        self,
+        *,
+        ieee: str,
+        endpoint_id: int,
+        hub_name: str,
+        area_id: str | None,
+    ) -> FlowResult:
+        return self.async_create_entry(  # type: ignore[attr-defined]
+            title=hub_name,
+            data=hub_subentry_data(
+                ieee=ieee,
+                endpoint_id=endpoint_id,
+                area_id=area_id,
+            ),
+            unique_id=ieee.lower().replace(" ", ""),
+        )
+
+    async def _async_step_combined_hub_subentry(
         self, user_input: dict[str, Any] | None
     ) -> FlowResult:
         discovered = list_onboarding_hub_choices(self.hass)
@@ -300,32 +384,33 @@ class _HubPickMixin:
             device = device_reg.async_get(pick)
             if device is None:
                 return self.async_abort(reason="invalid_device")  # type: ignore[attr-defined]
-            ieee = _ieee_from_zha_device(device)
-            if ieee is None:
+            resolved = _resolve_hub_from_device(self.hass, device)
+            if resolved is None:
                 return self.async_abort(reason="unknown_ieee")  # type: ignore[attr-defined]
-            self._hub_ieee = ieee
-            self._hub_device_name = device.name_by_user or device.name
-            self._hub_endpoint_id = endpoint_for_zha_device(device)
+            ieee, default_name, endpoint_id = resolved
             await self.async_set_unique_id(ieee.lower().replace(" ", ""))  # type: ignore[attr-defined]
             self._abort_if_unique_id_configured()  # type: ignore[attr-defined]
-            return await self.async_step_hub_setup()  # type: ignore[attr-defined]
+            hub_name = str(user_input.get(CONF_HUB_NAME, "")).strip() or default_name
+            return await self._async_create_hub_subentry(
+                ieee=ieee,
+                endpoint_id=endpoint_id,
+                hub_name=hub_name,
+                area_id=_area_id_from_input(user_input),
+            )
 
         manual_label = await self._async_manual_hub_pick_label()
-        select_options = [
-            {"value": dev_id, "label": label} for dev_id, label in discovered
-        ]
-        select_options.append({"value": MENU_MANUAL, "label": manual_label})
+        default_pick = discovered[0][0] if len(discovered) == 1 else None
+        default_name = ""
+        if default_pick:
+            device = dr.async_get(self.hass).async_get(default_pick)
+            default_name = _default_name_for_device(device)
         return self.async_show_form(  # type: ignore[attr-defined]
-            step_id="pick_hub",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_HUB_PICK): selector.SelectSelector(
-                        selector.SelectSelectorConfig(
-                            options=select_options,
-                            mode=selector.SelectSelectorMode.DROPDOWN,
-                        )
-                    ),
-                }
+            step_id="user",
+            data_schema=_combined_hub_pick_schema(
+                discovered=discovered,
+                manual_label=manual_label,
+                default_pick=default_pick,
+                default_name=default_name,
             ),
             description_placeholders={"count": str(len(discovered))},
         )
@@ -344,30 +429,44 @@ class IrHubSubentryFlow(_HubPickMixin, ConfigSubentryFlow):
     ) -> FlowResult:
         if not self.hass.config_entries.async_entries(ZHA_DOMAIN):
             return self.async_abort(reason="zha_not_configured")
+
         init = self.context.get("discovery_info") or {}
-        if init and self._hub_ieee is None:
+        if init and self._hub_ieee is None and user_input is None:
             device_id = str(init.get("device_id", "")).strip()
             ieee = str(init.get("ieee", "")).strip() or None
             device_reg = dr.async_get(self.hass)
-            if device_id:
-                device = device_reg.async_get(device_id)
-                if device is not None:
-                    ieee = ieee or _ieee_from_zha_device(device)
-                    self._hub_device_name = device.name_by_user or device.name
+            device = device_reg.async_get(device_id) if device_id else None
+            if device is not None:
+                ieee = ieee or _ieee_from_zha_device(device)
+                self._hub_device_name = _default_name_for_device(device, ieee)
             if ieee:
                 self._hub_ieee = ieee
                 self._hub_endpoint_id = endpoint_for_ieee(self.hass, ieee)
-                await self.async_set_unique_id(ieee.lower().replace(" ", ""))
-                self._abort_if_unique_id_configured()
-                return await self.async_step_hub_setup()
-        if user_input is not None and CONF_HUB_PICK in user_input:
-            return await self._async_step_pick_hub_subentry(user_input)
-        return await self._async_step_pick_hub_subentry(user_input)
 
-    async def async_step_pick_hub(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        return await self._async_step_pick_hub_subentry(user_input)
+        if self._hub_ieee is not None:
+            default_name = self._hub_device_name or f"IR Hub {self._hub_ieee}"
+            if user_input is not None:
+                await self.async_set_unique_id(self._hub_ieee.lower().replace(" ", ""))
+                self._abort_if_unique_id_configured()
+                hub_name = str(user_input.get(CONF_HUB_NAME, "")).strip() or default_name
+                return await self._async_create_hub_subentry(
+                    ieee=self._hub_ieee,
+                    endpoint_id=self._hub_endpoint_id,
+                    hub_name=hub_name,
+                    area_id=_area_id_from_input(user_input),
+                )
+            return self.async_show_form(
+                step_id="user",
+                data_schema=vol.Schema(
+                    {
+                        vol.Required(CONF_HUB_NAME, default=default_name): selector.TextSelector(),
+                        vol.Optional(CONF_AREA_ID): selector.AreaSelector(),
+                    }
+                ),
+                description_placeholders={"hub_name": default_name},
+            )
+
+        return await self._async_step_combined_hub_subentry(user_input)
 
     async def async_step_hub_manual(
         self, user_input: dict[str, Any] | None = None
@@ -379,67 +478,25 @@ class IrHubSubentryFlow(_HubPickMixin, ConfigSubentryFlow):
             if device is None:
                 errors["base"] = "invalid_device"
             else:
-                ieee = _ieee_from_zha_device(device)
-                if ieee is None or ieee == "":
+                resolved = _resolve_hub_from_device(self.hass, device)
+                if resolved is None:
                     errors["base"] = "unknown_ieee"
                 else:
-                    self._hub_ieee = ieee
-                    self._hub_device_name = device.name_by_user or device.name
-                    self._hub_endpoint_id = endpoint_for_zha_device(device)
+                    ieee, default_name, endpoint_id = resolved
                     await self.async_set_unique_id(ieee.lower().replace(" ", ""))
                     self._abort_if_unique_id_configured()
-                    return await self.async_step_hub_setup()
+                    hub_name = str(user_input.get(CONF_HUB_NAME, "")).strip() or default_name
+                    return await self._async_create_hub_subentry(
+                        ieee=ieee,
+                        endpoint_id=endpoint_id,
+                        hub_name=hub_name,
+                        area_id=_area_id_from_input(user_input),
+                    )
 
         return self.async_show_form(
             step_id="hub_manual",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_ZHA_DEVICE): selector.DeviceSelector(
-                        selector.DeviceSelectorConfig(
-                            integration=ZHA_DOMAIN,
-                            filter=[
-                                {
-                                    "integration": ZHA_DOMAIN,
-                                    "model": "TS1201",
-                                }
-                            ],
-                        )
-                    ),
-                }
-            ),
+            data_schema=_manual_hub_schema(),
             errors=errors,
-        )
-
-    async def async_step_hub_setup(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        if self._hub_ieee is None:
-            return self.async_abort(reason="unknown_ieee")
-
-        default_name = self._hub_device_name or f"IR Hub {self._hub_ieee}"
-        if user_input is not None:
-            hub_name = str(user_input.get(CONF_HUB_NAME, "")).strip() or default_name
-            area_id = user_input.get(CONF_AREA_ID)
-            area_str = str(area_id).strip() if area_id else None
-            return self.async_create_entry(
-                title=hub_name,
-                data=hub_subentry_data(
-                    ieee=self._hub_ieee,
-                    endpoint_id=self._hub_endpoint_id,
-                    area_id=area_str,
-                ),
-                unique_id=self._hub_ieee.lower().replace(" ", ""),
-            )
-
-        return self.async_show_form(
-            step_id="hub_setup",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_HUB_NAME, default=default_name): selector.TextSelector(),
-                    vol.Optional(CONF_AREA_ID): selector.AreaSelector(),
-                }
-            ),
-            description_placeholders={"hub_name": default_name},
         )
 
 

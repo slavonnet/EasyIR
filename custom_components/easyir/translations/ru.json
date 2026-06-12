@@ -16,9 +16,11 @@
     "step": {
       "user": {
         "title": "Настройка EasyIR",
-        "description": "Найдено хабов TS1201: {count}. Выберите один или укажите устройство ZHA вручную.",
+        "description": "Выберите IR-хаб, имя и комнату. Найдено устройств TS1201: {count}.",
         "data": {
-          "hub_pick": "IR-хаб"
+          "hub_pick": "IR-хаб",
+          "hub_name": "Имя хаба",
+          "area_id": "Комната"
         },
         "options": {
           "manual": "Выбрать устройство ZHA вручную"
@@ -36,15 +38,9 @@
       },
       "hub_manual": {
         "title": "Выбор IR-хаба",
-        "description": "Выберите IR-передатчик ZHA (модель TS1201). Endpoint подбирается автоматически.",
+        "description": "Устройство ZHA (TS1201), имя и комната. Endpoint подбирается автоматически.",
         "data": {
-          "zha_device": "Устройство ZHA"
-        }
-      },
-      "hub_setup": {
-        "title": "IR-хаб",
-        "description": "Укажите имя и комнату для {hub_name}.",
-        "data": {
+          "zha_device": "Устройство ZHA",
           "hub_name": "Имя хаба",
           "area_id": "Комната"
         }

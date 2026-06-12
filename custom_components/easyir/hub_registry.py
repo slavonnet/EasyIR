@@ -9,6 +9,7 @@ from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.core import HomeAssistant
 
 from .const import (
+    CONF_AREA_ID,
     CONF_ENDPOINT_ID,
     CONF_ENTRY_KIND,
     CONF_HUB_ENTRY_ID,

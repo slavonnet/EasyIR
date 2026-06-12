@@ -22,11 +22,11 @@ class TestConfigFlowSteps(unittest.TestCase):
         self.assertIs(types["ir_hub"], IrHubSubentryFlow)
         self.assertIs(types["ir_remote"], IrRemoteSubentryFlow)
 
-    def test_hub_setup_step_exists(self) -> None:
-        self.assertTrue(callable(getattr(EasyIrConfigFlow, "async_step_hub_setup", None)))
+    def test_combined_user_step_exists(self) -> None:
+        self.assertTrue(callable(getattr(EasyIrConfigFlow, "async_step_user", None)))
 
-    def test_pick_hub_step_exists(self) -> None:
-        self.assertTrue(callable(getattr(EasyIrConfigFlow, "async_step_pick_hub", None)))
+    def test_manual_hub_step_exists(self) -> None:
+        self.assertTrue(callable(getattr(EasyIrConfigFlow, "async_step_hub_manual", None)))
 
 
 if __name__ == "__main__":

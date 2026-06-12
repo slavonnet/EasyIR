@@ -68,6 +68,14 @@ class TestHubRegistry(unittest.TestCase):
         self.assertIsInstance(hubs[0], HubRef)
         self.assertEqual(hubs[0].subentry_id, "hub-1")
 
+    def test_hub_subentry_data_includes_area(self) -> None:
+        data = hub_subentry_data(
+            ieee="aa:bb:cc:dd:ee:ff",
+            endpoint_id=1,
+            area_id="living_room",
+        )
+        self.assertEqual(data["area_id"], "living_room")
+
     def test_v4_subentry_remote_refs(self) -> None:
         parent = _Entry({}, version=4, entry_id="parent-1")
         remote_sub = ConfigSubentry(

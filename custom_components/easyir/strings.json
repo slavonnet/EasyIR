@@ -16,9 +16,11 @@
     "step": {
       "user": {
         "title": "Set up EasyIR",
-        "description": "Found {count} TS1201 IR hub(s). Pick one or choose manual ZHA selection.",
+        "description": "Pick IR hub, name, and room. Found {count} TS1201 device(s).",
         "data": {
-          "hub_pick": "IR hub"
+          "hub_pick": "IR hub",
+          "hub_name": "Hub name",
+          "area_id": "Room"
         },
         "options": {
           "manual": "Select ZHA device manually"
@@ -36,15 +38,9 @@
       },
       "hub_manual": {
         "title": "Select IR Hub",
-        "description": "Pick your ZHA IR blaster (TS1201). Endpoint is detected automatically.",
+        "description": "Pick ZHA IR blaster (TS1201), name, and room. Endpoint is detected automatically.",
         "data": {
-          "zha_device": "ZHA device"
-        }
-      },
-      "hub_setup": {
-        "title": "IR Hub",
-        "description": "Name the hub and choose a room for {hub_name}.",
-        "data": {
+          "zha_device": "ZHA device",
           "hub_name": "Hub name",
           "area_id": "Room"
         }
