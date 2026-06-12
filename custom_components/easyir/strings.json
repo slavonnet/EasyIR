@@ -6,7 +6,7 @@
       "invalid_device": "Selected device was not found.",
       "hub_not_found": "No EasyIR hub is configured to attach a remote.",
       "invalid_import": "Remote import data is incomplete.",
-      "not_hub_entry": "Options are only available for IR hub entries."
+      "already_configured": "EasyIR is already set up. Use the integration card to add hubs or remotes."
     },
     "error": {
       "invalid_device": "Selected device was not found.",
@@ -15,7 +15,7 @@
     },
     "step": {
       "user": {
-        "title": "Add IR Hub",
+        "title": "Set up EasyIR",
         "description": "Found {count} TS1201 IR hub(s). Pick one or choose manual ZHA selection.",
         "data": {
           "hub_pick": "IR hub"
@@ -25,7 +25,7 @@
         }
       },
       "pick_hub": {
-        "title": "Add IR Hub",
+        "title": "Select IR Hub",
         "description": "Found {count} TS1201 IR hub(s). Pick one or choose manual ZHA selection.",
         "data": {
           "hub_pick": "IR hub"
@@ -41,36 +41,86 @@
           "zha_device": "ZHA device"
         }
       },
-      "hub_confirm": {
-        "title": "Confirm IR Hub",
-        "description": "Add {hub_name} as an IR hub. You can attach a virtual remote now or later.",
+      "hub_setup": {
+        "title": "IR Hub",
+        "description": "Name the hub and choose a room for {hub_name}.",
         "data": {
-          "add_remote": "Add IR remote now"
-        }
-      },
-      "main_menu": {
-        "title": "EasyIR",
-        "menu_options": {
-          "add_hub": "Add IR hub",
-          "add_remote": "Add IR remote"
+          "hub_name": "Hub name",
+          "area_id": "Room"
         }
       },
       "hub_remote": {
         "title": "Add IR Remote",
         "description": "Attach a virtual remote profile to hub {hub_title}.",
         "data": {
-          "hub_entry_id": "IR hub",
+          "hub_subentry_id": "IR hub",
           "profile_choice": "IR profile",
           "profile_path": "Custom profile path",
           "remote_name": "Remote name"
         }
-      },
-      "menu": {
-        "title": "Hub options",
-        "menu_options": {
-          "add_remote": "Add IR remote",
-          "add_hub": "Add IR hub"
+      }
+    }
+  },
+  "config_subentries": {
+    "ir_hub": {
+      "title": "IR Hub",
+      "step": {
+        "user": {
+          "title": "Add IR Hub",
+          "description": "Select a TS1201 IR blaster from ZHA."
+        },
+        "pick_hub": {
+          "title": "Select IR Hub",
+          "description": "Found {count} TS1201 IR hub(s)."
+        },
+        "hub_manual": {
+          "title": "Select IR Hub",
+          "description": "Pick your ZHA IR blaster (TS1201)."
+        },
+        "hub_setup": {
+          "title": "IR Hub",
+          "description": "Name the hub and choose a room for {hub_name}.",
+          "data": {
+            "hub_name": "Hub name",
+            "area_id": "Room"
+          }
         }
+      },
+      "abort": {
+        "zha_not_configured": "Configure ZHA first.",
+        "unknown_ieee": "Could not read Zigbee IEEE from the device.",
+        "invalid_device": "Selected device was not found.",
+        "already_configured": "This IR hub is already configured."
+      },
+      "error": {
+        "invalid_device": "Selected device was not found.",
+        "unknown_ieee": "Could not read Zigbee IEEE from this device."
+      }
+    },
+    "ir_remote": {
+      "title": "IR Remote",
+      "step": {
+        "user": {
+          "title": "Add IR Remote",
+          "description": "Attach a virtual remote to an IR hub."
+        },
+        "hub_remote": {
+          "title": "Add IR Remote",
+          "description": "Attach a virtual remote profile to hub {hub_title}.",
+          "data": {
+            "hub_subentry_id": "IR hub",
+            "profile_choice": "IR profile",
+            "profile_path": "Custom profile path",
+            "remote_name": "Remote name"
+          }
+        }
+      },
+      "abort": {
+        "hub_not_found": "Add an IR hub before adding a remote."
+      },
+      "error": {
+        "invalid_profile": "Pick a built-in profile or enter a valid custom file path.",
+        "hub_not_found": "Selected hub was not found."
       }
     }
   },

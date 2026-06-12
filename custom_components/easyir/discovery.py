@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import logging
 
+from homeassistant.config_entries import SOURCE_USER, SubentryFlowContext
 from homeassistant.core import HomeAssistant, callback
 
-from .const import DOMAIN, FLOW_SOURCE_ADD_HUB
-from .hub_registry import configured_hub_ieees
+from .const import DOMAIN, SUBENTRY_TYPE_HUB
+from .hub_registry import configured_hub_ieees, parent_entry
 from .supported_hubs import iter_zha_ts1201_devices, ieee_from_zha_device
 
 _LOGGER = logging.getLogger(__name__)
@@ -20,7 +21,7 @@ def _ieee_for_device(device) -> str | None:
 
 @callback
 def async_schedule_hub_discovery(hass: HomeAssistant) -> None:
-    """Offer discovered TS1201 hubs via add-hub flow (once per HA session)."""
+    """Offer discovered TS1201 hubs via add-hub subentry flow (once per HA session)."""
     root = hass.data.setdefault(DOMAIN, {})
     if root.get(_DISCOVERY_SCAN_DONE):
         return
@@ -29,8 +30,9 @@ def async_schedule_hub_discovery(hass: HomeAssistant) -> None:
 
 
 async def _async_discover_hubs(hass: HomeAssistant) -> None:
-    """Start add-hub flow for each unconfigured TS1201 (EasyIR must already be set up)."""
-    if not hass.config_entries.async_entries(DOMAIN):
+    """Start add-hub subentry flow for each unconfigured TS1201."""
+    parent = parent_entry(hass)
+    if parent is None:
         return
     configured = configured_hub_ieees(hass)
     for device in iter_zha_ts1201_devices(hass):
@@ -41,8 +43,10 @@ async def _async_discover_hubs(hass: HomeAssistant) -> None:
         if norm in configured:
             continue
         _LOGGER.debug("Suggesting discovered IR hub ieee=%s device_id=%s", ieee, device.id)
-        await hass.config_entries.flow.async_init(
-            DOMAIN,
-            context={"source": FLOW_SOURCE_ADD_HUB},
-            data={"device_id": device.id, "ieee": ieee},
+        await hass.config_entries.subentries.async_init(
+            (parent.entry_id, SUBENTRY_TYPE_HUB),
+            context=SubentryFlowContext(
+                source=SOURCE_USER,
+                discovery_info={"device_id": device.id, "ieee": ieee},
+            ),
         )

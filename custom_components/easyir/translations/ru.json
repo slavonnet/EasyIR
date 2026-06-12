@@ -6,7 +6,7 @@
       "invalid_device": "Выбранное устройство не найдено.",
       "hub_not_found": "Нет настроенного IR-хаба для привязки пульта.",
       "invalid_import": "Неполные данные импорта пульта.",
-      "not_hub_entry": "Опции доступны только для записей IR-хаба."
+      "already_configured": "EasyIR уже настроен. Добавляйте хабы и пульты с карточки интеграции."
     },
     "error": {
       "invalid_device": "Выбранное устройство не найдено.",
@@ -15,7 +15,7 @@
     },
     "step": {
       "user": {
-        "title": "Добавить IR-хаб",
+        "title": "Настройка EasyIR",
         "description": "Найдено хабов TS1201: {count}. Выберите один или укажите устройство ZHA вручную.",
         "data": {
           "hub_pick": "IR-хаб"
@@ -25,7 +25,7 @@
         }
       },
       "pick_hub": {
-        "title": "Добавить IR-хаб",
+        "title": "Выбор IR-хаба",
         "description": "Найдено хабов TS1201: {count}. Выберите один или укажите устройство ZHA вручную.",
         "data": {
           "hub_pick": "IR-хаб"
@@ -41,36 +41,86 @@
           "zha_device": "Устройство ZHA"
         }
       },
-      "hub_confirm": {
-        "title": "Подтверждение IR-хаба",
-        "description": "Добавить {hub_name} как IR-хаб. Пульт можно привязать сейчас или позже.",
+      "hub_setup": {
+        "title": "IR-хаб",
+        "description": "Укажите имя и комнату для {hub_name}.",
         "data": {
-          "add_remote": "Добавить пульт сейчас"
-        }
-      },
-      "main_menu": {
-        "title": "EasyIR",
-        "menu_options": {
-          "add_hub": "Добавить IR-хаб",
-          "add_remote": "Добавить пульт"
+          "hub_name": "Имя хаба",
+          "area_id": "Комната"
         }
       },
       "hub_remote": {
         "title": "Добавить пульт",
         "description": "Привязать профиль пульта к хабу {hub_title}.",
         "data": {
-          "hub_entry_id": "IR-хаб",
+          "hub_subentry_id": "IR-хаб",
           "profile_choice": "IR-профиль",
           "profile_path": "Свой путь к JSON",
           "remote_name": "Имя пульта"
         }
-      },
-      "menu": {
-        "title": "Настройки хаба",
-        "menu_options": {
-          "add_remote": "Добавить пульт",
-          "add_hub": "Добавить IR-хаб"
+      }
+    }
+  },
+  "config_subentries": {
+    "ir_hub": {
+      "title": "IR-хаб",
+      "step": {
+        "user": {
+          "title": "Добавить IR-хаб",
+          "description": "Выберите IR-передатчик TS1201 из ZHA."
+        },
+        "pick_hub": {
+          "title": "Выбор IR-хаба",
+          "description": "Найдено хабов TS1201: {count}."
+        },
+        "hub_manual": {
+          "title": "Выбор IR-хаба",
+          "description": "Выберите IR-передатчик ZHA (модель TS1201)."
+        },
+        "hub_setup": {
+          "title": "IR-хаб",
+          "description": "Укажите имя и комнату для {hub_name}.",
+          "data": {
+            "hub_name": "Имя хаба",
+            "area_id": "Комната"
+          }
         }
+      },
+      "abort": {
+        "zha_not_configured": "Сначала настройте ZHA.",
+        "unknown_ieee": "Не удалось прочитать Zigbee IEEE у устройства.",
+        "invalid_device": "Выбранное устройство не найдено.",
+        "already_configured": "Этот IR-хаб уже настроен."
+      },
+      "error": {
+        "invalid_device": "Выбранное устройство не найдено.",
+        "unknown_ieee": "Не удалось прочитать Zigbee IEEE у этого устройства."
+      }
+    },
+    "ir_remote": {
+      "title": "ИК-пульт",
+      "step": {
+        "user": {
+          "title": "Добавить пульт",
+          "description": "Привязать виртуальный пульт к IR-хабу."
+        },
+        "hub_remote": {
+          "title": "Добавить пульт",
+          "description": "Привязать профиль пульта к хабу {hub_title}.",
+          "data": {
+            "hub_subentry_id": "IR-хаб",
+            "profile_choice": "IR-профиль",
+            "profile_path": "Свой путь к JSON",
+            "remote_name": "Имя пульта"
+          }
+        }
+      },
+      "abort": {
+        "hub_not_found": "Сначала добавьте IR-хаб."
+      },
+      "error": {
+        "invalid_profile": "Выберите встроенный профиль или укажите корректный путь к JSON.",
+        "hub_not_found": "Выбранный хаб не найден."
       }
     }
   },
@@ -81,7 +131,7 @@
       "fields": {
         "hub_id": {
           "name": "ID хаба",
-          "description": "ID config entry IR-хаба EasyIR."
+          "description": "ID IR-хаба EasyIR."
         },
         "ieee": {
           "name": "IEEE",

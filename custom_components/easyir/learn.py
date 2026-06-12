@@ -83,13 +83,13 @@ def _entry_for_ieee(hass: HomeAssistant, ieee: str) -> dict[str, Any] | None:
 
 
 def _entry_for_hub_id(hass: HomeAssistant, hub_id: str) -> dict[str, Any] | None:
-    """Return config entry data for a specific EasyIR hub entry id."""
-    from .hub_registry import hub_entry_by_id
+    """Return hub transport data for a specific EasyIR hub id (subentry id)."""
+    from .hub_registry import hub_ref_by_id
 
-    entry = hub_entry_by_id(hass, str(hub_id).strip())
-    if entry is None:
+    hub = hub_ref_by_id(hass, str(hub_id).strip())
+    if hub is None:
         return None
-    return dict(entry.data)
+    return dict(hub.data)
 
 
 def _entry_endpoint_id(entry_data: dict[str, Any] | None) -> int:
@@ -601,11 +601,11 @@ def _extract_learn_attr_code(result: Any) -> str | None:
 
 async def async_list_configured_learn_hubs(hass: HomeAssistant) -> list[dict[str, Any]]:
     """Return configured EasyIR hubs suitable for learn operations."""
-    from .hub_registry import iter_hub_entries
+    from .hub_registry import iter_hub_refs
 
     hubs: list[dict[str, Any]] = []
-    for entry in iter_hub_entries(hass):
-        data = dict(entry.data)
+    for hub in iter_hub_refs(hass):
+        data = dict(hub.data)
         ieee = str(data.get(CONF_IEEE, "")).strip()
         if not ieee:
             continue
@@ -614,8 +614,8 @@ async def async_list_configured_learn_hubs(hass: HomeAssistant) -> list[dict[str
             continue
         hubs.append(
             {
-                "hub_id": entry.entry_id,
-                "title": entry.title,
+                "hub_id": hub.subentry_id,
+                "title": hub.title,
                 "ieee": ieee,
                 "endpoint_id": _entry_endpoint_id(data),
                 "vendor_profile": vendor_profile,

@@ -3,63 +3,53 @@
 from __future__ import annotations
 
 import unittest
-from unittest.mock import AsyncMock, patch
+from types import MappingProxyType
+from unittest.mock import AsyncMock, MagicMock, patch
+
+from homeassistant.config_entries import ConfigSubentry
 
 from custom_components.easyir.climate import async_setup_entry
+from custom_components.easyir.const import SUBENTRY_TYPE_REMOTE
 
 
-class _FakeEntry:
-    def __init__(self) -> None:
-        self.data = {
-            "entry_kind": "remote",
-            "hub_entry_id": "hub-1",
-            "hub_ids": ["hub-1"],
-            "profile_path": "/tmp/profile.json",
-        }
-        self.entry_id = "entry-1"
-        self.title = "Remote demo"
+class TestClimateAsyncSetup(unittest.IsolatedAsyncioTestCase):
+    async def test_setup_entry_resolves_capability_view_in_executor(self) -> None:
+        parent = MagicMock()
+        parent.version = 4
+        parent.entry_id = "parent-1"
+        parent.data = {}
+        remote_sub = ConfigSubentry(
+            data=MappingProxyType(
+                {
+                    "hub_subentry_id": "hub-1",
+                    "hub_entry_id": "hub-1",
+                    "hub_ids": ["hub-1"],
+                    "profile_path": "/tmp/profile.json",
+                }
+            ),
+            subentry_id="remote-1",
+            subentry_type=SUBENTRY_TYPE_REMOTE,
+            title="Remote demo",
+            unique_id="hub-1_demo",
+        )
+        parent.subentries = MappingProxyType({"remote-1": remote_sub})
 
-
-class _FakeHass:
-    def __init__(self) -> None:
-        self.async_add_executor_job = AsyncMock(
+        hass = MagicMock()
+        hass.async_add_executor_job = AsyncMock(
             return_value={
                 "protocol": "legacy_profile",
                 "pilot": False,
             }
         )
-        hub = type(
-            "HubEntry",
-            (),
-            {
-                "entry_id": "hub-1",
-                "title": "Hub",
-                "data": {
-                    "entry_kind": "hub",
-                    "ieee": "aa:bb:cc:dd",
-                    "endpoint_id": 1,
-                    "transport": "ts1201_zha",
-                },
-            },
-        )()
-        self.config_entries = type(
-            "Cfg",
-            (),
-            {"async_entries": lambda _self, _domain: [hub]},
-        )()
+        hass.config_entries.async_entries.return_value = [parent]
 
-
-class TestClimateAsyncSetup(unittest.IsolatedAsyncioTestCase):
-    async def test_setup_entry_resolves_capability_view_in_executor(self) -> None:
-        hass = _FakeHass()
-        entry = _FakeEntry()
         added: list[object] = []
 
         def _add_entities(entities, _update_before_add) -> None:
             added.extend(entities)
 
         with patch("custom_components.easyir.climate.climate_capability_view") as cap_fn:
-            await async_setup_entry(hass, entry, _add_entities)
+            await async_setup_entry(hass, parent, _add_entities)
 
         hass.async_add_executor_job.assert_awaited_once()
         call = hass.async_add_executor_job.await_args
