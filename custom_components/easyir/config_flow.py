@@ -140,7 +140,7 @@ class EasyIrConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Default entry: main menu (add hub / add remote)."""
+        """First integration setup adds a hub; Add entry on the card opens the menu."""
         source = str(self.context.get("source", "")).strip()
         if source == FLOW_SOURCE_HUB_REMOTE:
             self._prefill_hub_entry_id = str(
@@ -149,7 +149,22 @@ class EasyIrConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return await self.async_step_hub_remote()
         if source == FLOW_SOURCE_ADD_HUB:
             return await self.async_step_add_hub(user_input)
+
+        if user_input is not None and CONF_HUB_PICK in user_input:
+            return await self._async_step_pick_hub(user_input)
+
+        if not self.hass.config_entries.async_entries(DOMAIN):
+            if not self.hass.config_entries.async_entries(ZHA_DOMAIN):
+                return self.async_abort(reason="zha_not_configured")
+            return await self._async_step_pick_hub(user_input)
+
         return await self.async_step_main_menu()
+
+    async def async_step_pick_hub(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Pick discovered TS1201 hub (dedicated step handler for the pick form)."""
+        return await self._async_step_pick_hub(user_input)
 
     async def async_step_main_menu(
         self, user_input: dict[str, Any] | None = None
@@ -216,7 +231,7 @@ class EasyIrConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             }
         )
         return self.async_show_form(
-            step_id="user",
+            step_id="pick_hub",
             data_schema=data_schema,
             description_placeholders={"count": str(len(discovered))},
         )

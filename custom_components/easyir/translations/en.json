@@ -24,6 +24,16 @@
           "manual": "Select ZHA device manually"
         }
       },
+      "pick_hub": {
+        "title": "Add IR Hub",
+        "description": "Found {count} TS1201 IR hub(s). Pick one or choose manual ZHA selection.",
+        "data": {
+          "hub_pick": "IR hub"
+        },
+        "options": {
+          "manual": "Select ZHA device manually"
+        }
+      },
       "hub_manual": {
         "title": "Select IR Hub",
         "description": "Pick your ZHA IR blaster (TS1201). Endpoint is detected automatically.",

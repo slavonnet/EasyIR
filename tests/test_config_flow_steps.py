@@ -17,6 +17,9 @@ class TestConfigFlowSteps(unittest.TestCase):
     def test_hub_remote_step_handler_exists(self) -> None:
         self.assertTrue(callable(getattr(EasyIrConfigFlow, "async_step_hub_remote", None)))
 
+    def test_pick_hub_step_handler_exists(self) -> None:
+        self.assertTrue(callable(getattr(EasyIrConfigFlow, "async_step_pick_hub", None)))
+
 
 if __name__ == "__main__":
     unittest.main()

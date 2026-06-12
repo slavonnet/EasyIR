@@ -2,6 +2,14 @@
 
 All notable changes to EasyIR are documented here.
 
+## [0.1.5] - 2026-06-12
+
+### Fixed
+
+- **First-time integration setup** again adds **only the IR hub** (hub picker), not the hub/remote menu.
+- **Add entry** on the EasyIR card (when entries already exist) shows **Add IR hub / Add IR remote**.
+- Hub picker form routed to `async_step_pick_hub` (fixes broken menu/hub steps after v0.1.4).
+
 ## [0.1.4] - 2026-06-12
 
 ### Fixed
