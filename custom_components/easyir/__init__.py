@@ -60,6 +60,7 @@ from .signal_log.ha_bridge import (
     log_outbound_send,
 )
 from .signal_log.panel import async_register_signal_log_panel
+from .ui_api import async_register_easyir_ui_api
 from .transports import Ts1201ZhaTransport
 from .transports.base import IrTransport, TransportSendContext
 
@@ -169,6 +170,7 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     async_setup_inbound_listener(hass)
     async_setup_remote_button_listener(hass)
     async_register_signal_log_api(hass)
+    async_register_easyir_ui_api(hass)
     async_schedule_hub_discovery(hass)
 
     async def handle_send_raw(call: ServiceCall) -> None:

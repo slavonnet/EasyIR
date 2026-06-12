@@ -30,12 +30,16 @@ class TestSignalLogPanel(unittest.IsolatedAsyncioTestCase):
         ) as register_panel:
             await async_register_signal_log_panel(SimpleNamespace(**hass.__dict__))
 
-        register_panel.assert_awaited_once()
-        kwargs = register_panel.await_args.kwargs
-        self.assertEqual(kwargs["webcomponent_name"], "easyir-signal-log-panel")
-        self.assertFalse(kwargs["embed_iframe"])
-        self.assertEqual(kwargs["frontend_url_path"], "easyir-signal-log")
-        self.assertEqual(kwargs["js_url"], "/easyir_static/signal_log_panel_v2.js")
+        self.assertEqual(register_panel.await_count, 2)
+        calls = [call.kwargs for call in register_panel.await_args_list]
+        main_panel = next(c for c in calls if c["frontend_url_path"] == "easyir")
+        self.assertEqual(main_panel["webcomponent_name"], "easyir-main-panel")
+        self.assertEqual(main_panel["js_url"], "/easyir_static/easyir_panel_v1.js")
+        self.assertFalse(main_panel["embed_iframe"])
+        signal_log = next(c for c in calls if c["frontend_url_path"] == "easyir-signal-log")
+        self.assertEqual(signal_log["webcomponent_name"], "easyir-signal-log-panel")
+        self.assertEqual(signal_log["js_url"], "/easyir_static/signal_log_panel_v2.js")
+        self.assertFalse(signal_log["embed_iframe"])
 
     async def test_register_is_idempotent(self) -> None:
         hass = _FakeHass()
@@ -47,7 +51,7 @@ class TestSignalLogPanel(unittest.IsolatedAsyncioTestCase):
             await async_register_signal_log_panel(ns)
             await async_register_signal_log_panel(ns)
 
-        register_panel.assert_awaited_once()
+        self.assertEqual(register_panel.await_count, 2)
         self.assertTrue(ns.data[DOMAIN]["_signal_log_panel_registered"])
 
 

@@ -2,6 +2,30 @@
 
 All notable changes to EasyIR are documented here.
 
+## [0.2.3] - 2026-06-12
+
+### Added
+
+- New **EasyIR sidebar page** (`/easyir`) with:
+  - explicit labeled actions **Добавить хаб** / **Добавить пульт**,
+  - two-level tree rendering **Hub -> Remote**,
+  - remote onboarding wizard in 3 steps with card **grids**:
+    1) type grid,
+    2) brand grid,
+    3) device grid (multi-column, scrollable).
+- New backend UI API endpoints for EasyIR panel:
+  - hub discovery + creation,
+  - area list loading,
+  - remote catalog by type/brand,
+  - remote creation with duplicate-safe unique id generation.
+
+### Changed
+
+- Extracted remote profile catalog grouping logic into shared module `remote_catalog.py` and reused it in config flow + UI API.
+- Sidebar panel registration now includes both:
+  - `EasyIR` main management page,
+  - `EasyIR Signal Log`.
+
 ## [0.2.2] - 2026-06-12
 
 ### Fixed

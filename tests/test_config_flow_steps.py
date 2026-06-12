@@ -6,14 +6,16 @@ import unittest
 from types import MappingProxyType, SimpleNamespace
 
 from custom_components.easyir.config_flow import (
-    _climate_catalog_from_options,
-    _non_climate_catalog_from_options,
-    _tv_catalog_from_options,
     EasyIrConfigFlow,
     IrHubSubentryFlow,
     IrRemoteSubentryFlow,
 )
 from custom_components.easyir.const import SUBENTRY_TYPE_REMOTE
+from custom_components.easyir.remote_catalog import (
+    climate_catalog_from_options,
+    non_climate_catalog_from_options,
+    tv_catalog_from_options,
+)
 
 
 class TestConfigFlowSteps(unittest.TestCase):
@@ -51,7 +53,7 @@ class TestConfigFlowSteps(unittest.TestCase):
             {"value": "climate/7386.json", "label": "Midea — KFR-32GW"},
             {"value": "demo_ac", "label": "Demo AC"},
         ]
-        catalog = _climate_catalog_from_options(options)
+        catalog = climate_catalog_from_options(options)
         self.assertIn("LG", catalog)
         self.assertEqual(catalog["LG"][0]["value"], "climate/7062.json")
         self.assertEqual(catalog["LG"][0]["label"], "P12RK")
@@ -64,7 +66,7 @@ class TestConfigFlowSteps(unittest.TestCase):
             {"value": "tv/samsung_q80.json", "label": "Samsung TV — Q80"},
             {"value": "demo_ac", "label": "Demo AC"},
         ]
-        catalog = _tv_catalog_from_options(options)
+        catalog = tv_catalog_from_options(options)
         self.assertIn("Samsung TV", catalog)
         self.assertEqual(catalog["Samsung TV"][0]["value"], "tv/samsung_q80.json")
         self.assertNotIn("LG", catalog)
@@ -74,7 +76,7 @@ class TestConfigFlowSteps(unittest.TestCase):
             {"value": "climate/7062.json", "label": "LG — P12RK"},
             {"value": "demo_ac", "label": "Demo AC"},
         ]
-        catalog = _non_climate_catalog_from_options(options)
+        catalog = non_climate_catalog_from_options(options)
         self.assertNotIn("LG", catalog)
         self.assertIn("Other", catalog)
 
