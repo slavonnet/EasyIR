@@ -238,10 +238,31 @@ These rules are mandatory for both directly started agents and agents started by
 
 ## Cursor Cloud specific instructions
 
-EasyIR is a Home Assistant **custom integration** (HACS), not a standalone app: it runs inside Home Assistant and its full end-to-end path needs ZHA + a TS1201 Zigbee IR blaster, so there is no local "run the app" target. Validate via the unit suite and by exercising the IR core directly.
+EasyIR is a Home Assistant **custom integration** (HACS), not a standalone app: it runs inside Home Assistant and its full IR-send path needs ZHA + a TS1201 Zigbee IR blaster. Default validation is the unit suite + exercising the IR core directly (below). For browser UX testing of the setup wizard there is a pre-built real-HA stack — see "Browser UX testing of the config-flow wizard" below.
 
 - **Python deps are installed system-wide** by the startup update script (`pip install --break-system-packages "homeassistant==2025.1.4"`). There is no venv and no activation step — just use `python3` directly. (A venv is avoided on purpose: the base image lacks `python3.12-venv`, and adding apt installs to the reliability-critical update script is undesirable.)
 - **HA version pin:** this base image ships Python 3.12, which caps `homeassistant` at `2025.1.4` (>= 2025.2 requires Python 3.13). `manifest.json` declares min HA `2025.7.0`, but the test suite is written to run on older HA via `tests/ha_subentry_stubs.py` (subentry API shim), so `2025.1.4` is the correct test target here — do not "fix" the version to match the manifest.
 - **Tests:** run from repo root: `python3 -m unittest discover -s tests -v` (per section 8). `tests/__init__.py` imports `homeassistant`, so tests fail to even load without HA installed.
 - **Lint:** no linter is configured in this repo. Use `python3 -m compileall custom_components/easyir` as a syntax check.
 - **Exercising the IR core without HA:** modules under `custom_components/easyir/` (e.g. `helpers.resolve_profile_raw`, `encode_raw_to_tuya_base64`, `decode_ir_payload`) drive the real bundled profiles (`profiles/climate/7062.json` LG P12RK via the `lg28` engine, `profiles/demo_ac.json`). When importing these standalone, first call `tests.ha_subentry_stubs.install()` because `helpers.resolve_profile_raw` falls back to importing the full `custom_components.easyir` package, which needs the subentry shim on HA < 2025.7. Note: the final trailing IR gap is intentionally capped to uint16 (65535), so decode round-trips match on the frame body but not that last gap.
+
+### Browser UX testing of the config-flow wizard (real Home Assistant)
+
+A full HA browser stack for walking the setup wizard (hub onboarding + the `type → brand → model` "Add remote" subentry flow) is **pre-built in the VM snapshot** (it is intentionally NOT in the startup update script — too heavy/brittle). It lives outside the repo so it does not pollute `/workspace`:
+
+- `~/ha-dev/` — a **Python 3.13** venv (deadsnakes; `~/.venv` only has 3.12) with `homeassistant` (native `ConfigSubentryFlow`, which the unit-test target 2025.1.4 lacks) plus ZHA deps (`zha`, `serialx`, `aiousbwatcher`, `pyserial`, `universal-silabs-flasher`, `ha-silabs-firmware-client`).
+- `~/ha-config/` — HA config dir. `custom_components/easyir` is a **symlink to `/workspace/custom_components/easyir`** (repo edits apply on HA restart). Onboarding is already done (owner **`admin` / `admin1234`**).
+- `~/ha-config/configuration.yaml` replaces `default_config:` with an explicit integration set, because `default_config` pulls `go2rtc`, which needs a Docker binary absent here and otherwise blocks the `config` UI.
+
+Start / restart HA (tmux session `ha-server`), then open `http://localhost:8123` in the Desktop/Chrome pane:
+
+```bash
+tmux -f /exec-daemon/tmux.portal.conf send-keys -t ha-server:0.0 C-c            # stop if running
+tmux -f /exec-daemon/tmux.portal.conf send-keys -t ha-server:0.0 \
+  '~/ha-dev/bin/hass -c ~/ha-config --log-file ~/ha-config/home-assistant.log' C-m
+```
+
+- **No real Zigbee hardware:** a fake ZHA config entry + a TS1201 device (`zha` identifier `8c:65:a3:ff:fe:92:63:ce`, model `TS1201`) are seeded into `~/ha-config/.storage/{core.config_entries,core.device_registry}`. This is enough for the EasyIR config flow to pass its `async_entries("zha")` check and to **discover the TS1201 hub** in the wizard. The fake ZHA entry stays in **"Failed setup, will retry"** (no radio) — that is expected and harmless.
+- **Re-seeding gotcha:** completing the hub wizard makes EasyIR rewrite that device (model → `IR Hub`, adds an `easyir` identifier). After deleting the EasyIR integration to re-test discovery, reset the device back to `model`/`model_id` `TS1201` with `identifiers` = `[["zha", "8c:65:a3:..."]]` only (edit `core.device_registry` with HA stopped), or discovery will no longer list it.
+
+**Known bug surfaced by this flow (not an env issue):** the **"Add remote" subentry submit fails** with "Unknown error occurred". `config_flow.py` `_async_create_remote_subentry` (and `IrHubSubentryFlow.async_step_user`) call `self.async_set_unique_id(...)` / `self._abort_if_unique_id_configured()`, which **do not exist on `ConfigSubentryFlow`** — confirmed absent even in HA 2025.7.4 (the manifest's min), so this is a genuine product bug, not version drift. The correct API is to pass `unique_id=` to `async_create_entry` (already done alongside the bad calls). The runtime path is uncovered by unit tests (`tests/test_config_flow_steps.py` only checks the unique-id helper and that step methods exist). Hub creation and all three remote wizard steps (type → brand → model) render and navigate correctly; only the final remote-create call raises.
