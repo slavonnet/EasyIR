@@ -2,6 +2,13 @@
 
 All notable changes to EasyIR are documented here.
 
+## [0.2.1] - 2026-06-12
+
+### Changed
+
+- Stable release on top of merged PR #56 and #57 content.
+- Keeps onboarding wizard fixes, learn UX updates, and expanded LG remote capabilities.
+
 ## [0.2.1-beta2] - 2026-06-12
 
 ### Changed
