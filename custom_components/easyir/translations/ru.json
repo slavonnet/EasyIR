@@ -1,31 +1,12 @@
 {
-  "services": {
-    "learn_once": {
-      "name": "Выучить один IR-код",
-      "description": "Включает режим Learn на выбранном IR-хабе и ждёт один код (или до тайм-аута).",
-      "fields": {
-        "hub_id": {
-          "name": "ID хаба EasyIR",
-          "description": "Предпочтительный способ выбора цели Learn: ID настроенного хаба EasyIR."
-        },
-        "ieee": {
-          "name": "IEEE устройства",
-          "description": "Ручной fallback, если hub_id не указан."
-        },
-        "endpoint_id": {
-          "name": "Endpoint",
-          "description": "Необязательный endpoint. Если не задан, берётся из выбранного хаба."
-        },
-        "timeout_s": {
-          "name": "Тайм-аут (секунды)",
-          "description": "Сколько ждать IR-код после включения Learn."
-        }
-      }
-    }
-  },
   "config": {
     "abort": {
-      "zha_not_configured": "Сначала настройте ZHA, затем добавьте EasyIR."
+      "zha_not_configured": "Сначала настройте ZHA, затем добавьте EasyIR.",
+      "unknown_ieee": "Не удалось прочитать Zigbee IEEE у обнаруженного устройства.",
+      "invalid_device": "Выбранное устройство не найдено.",
+      "hub_not_found": "Нет настроенного IR-хаба для привязки пульта.",
+      "invalid_import": "Неполные данные импорта пульта.",
+      "not_hub_entry": "Опции доступны только для записей IR-хаба."
     },
     "error": {
       "invalid_device": "Выбранное устройство не найдено.",
@@ -34,15 +15,82 @@
     },
     "step": {
       "user": {
-        "title": "EasyIR",
-        "description": "Выберите устройство ZHA (список отфильтрован по модели TS1201). Встроенные профили идут с EasyIR; свой путь — по желанию.%optional_supported",
+        "title": "Добавить IR-хаб",
+        "description": "Найдено хабов TS1201: {count}. Выберите один или укажите устройство ZHA вручную.",
+        "data": {
+          "hub_pick": "IR-хаб"
+        },
+        "options": {
+          "manual": "Выбрать устройство ZHA вручную"
+        }
+      },
+      "hub_manual": {
+        "title": "Выбор IR-хаба",
+        "description": "Выберите IR-передатчик ZHA (модель TS1201).",
         "data": {
           "zha_device": "Устройство ZHA",
+          "endpoint_id": "Endpoint"
+        }
+      },
+      "hub_confirm": {
+        "title": "Подтверждение IR-хаба",
+        "description": "Настройка {hub_name}. Можно сразу добавить виртуальный пульт.",
+        "data": {
+          "endpoint_id": "Endpoint",
+          "add_remote": "Добавить пульт сейчас"
+        }
+      },
+      "hub_remote": {
+        "title": "Добавить пульт",
+        "description": "Привязать профиль пульта к хабу {hub_title}.",
+        "data": {
           "profile_choice": "IR-профиль",
-          "profile_path": "Свой путь к JSON (только если выбрали «Свой путь»)",
-          "endpoint_id": "Endpoint по умолчанию"
+          "profile_path": "Свой путь к JSON",
+          "remote_name": "Имя пульта"
+        }
+      },
+      "menu": {
+        "title": "Настройки хаба",
+        "menu_options": {
+          "add_remote": "Добавить пульт"
         }
       }
+    }
+  },
+  "services": {
+    "learn_once": {
+      "name": "Включить режим Learn",
+      "description": "Включает режим Learn на хабе (без опроса атрибута). Код читать через read_learned_ir.",
+      "fields": {
+        "hub_id": {
+          "name": "ID хаба",
+          "description": "ID config entry IR-хаба EasyIR."
+        },
+        "ieee": {
+          "name": "IEEE",
+          "description": "IEEE Zigbee IR-хаба."
+        },
+        "endpoint_id": {
+          "name": "Endpoint",
+          "description": "Необязательный endpoint (по умолчанию из хаба)."
+        },
+        "timeout_s": {
+          "name": "Тайм-аут (сек)",
+          "description": "Время ожидания в режиме Learn на устройстве."
+        }
+      }
+    },
+    "start_learn": {
+      "name": "Включить режим Learn",
+      "description": "Включает Learn на хабе. Код — через read_learned_ir."
+    },
+    "read_learned_ir": {
+      "name": "Прочитать выученный IR-код",
+      "description": "Однократное чтение атрибута после Learn."
+    },
+    "capture_inbound_ir": {
+      "name": "Перехват входящего IR",
+      "description": "Временно слушать zha_event (без постоянного цикла)."
     }
   }
 }

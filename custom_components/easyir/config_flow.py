@@ -35,6 +35,7 @@ from .hub_registry import hub_entry_by_id, is_hub_entry, iter_hub_entries
 from .supported_hubs import ieee_from_zha_device, list_onboarding_hub_choices
 
 CONF_ZHA_DEVICE = "zha_device"
+CONF_HUB_PICK = "hub_pick"
 ZHA_DOMAIN = "zha"
 MENU_MANUAL = "manual"
 MENU_SKIP_REMOTE = "skip_remote"
@@ -54,6 +55,20 @@ class EasyIrConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._hub_ieee: str | None = None
         self._hub_device_name: str | None = None
         self._prefill_hub_entry_id: str | None = None
+
+    async def _async_manual_hub_pick_label(self) -> str:
+        from homeassistant.helpers import translation
+
+        strings = await translation.async_get_translations(
+            self.hass,
+            self.hass.config.language,
+            "config",
+            integrations=[DOMAIN],
+        )
+        return strings.get(
+            f"component.{DOMAIN}.config.step.user.options.manual",
+            "Select ZHA device manually",
+        )
 
     async def async_step_import(self, user_input: dict[str, Any]) -> FlowResult:
         """Import remote entry during v2→v3 migration."""
@@ -104,20 +119,15 @@ class EasyIrConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_abort(reason="zha_not_configured")
 
         discovered = list_onboarding_hub_choices(self.hass)
-        if user_input is None and discovered:
-            return self.async_show_menu(
-                step_id="user",
-                menu_options=[dev_id for dev_id, _ in discovered] + [MENU_MANUAL],
-                description_placeholders={
-                    "count": str(len(discovered)),
-                },
-            )
+        if not discovered:
+            return await self.async_step_hub_manual()
 
-        if user_input is not None and isinstance(user_input, str):
-            if user_input == MENU_MANUAL:
+        if user_input is not None:
+            pick = str(user_input.get(CONF_HUB_PICK, "")).strip()
+            if pick == MENU_MANUAL:
                 return await self.async_step_hub_manual()
             device_reg = dr.async_get(self.hass)
-            device = device_reg.async_get(user_input)
+            device = device_reg.async_get(pick)
             if device is None:
                 return self.async_abort(reason="invalid_device")
             ieee = _ieee_from_zha_device(device)
@@ -129,7 +139,26 @@ class EasyIrConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._abort_if_unique_id_configured()
             return await self.async_step_hub_confirm()
 
-        return await self.async_step_hub_manual()
+        manual_label = await self._async_manual_hub_pick_label()
+        select_options = [
+            {"value": dev_id, "label": label} for dev_id, label in discovered
+        ]
+        select_options.append({"value": MENU_MANUAL, "label": manual_label})
+        data_schema = vol.Schema(
+            {
+                vol.Required(CONF_HUB_PICK): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=select_options,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                ),
+            }
+        )
+        return self.async_show_form(
+            step_id="user",
+            data_schema=data_schema,
+            description_placeholders={"count": str(len(discovered))},
+        )
 
     async def async_step_hub_manual(
         self, user_input: dict[str, Any] | None = None

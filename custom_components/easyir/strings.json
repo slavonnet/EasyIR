@@ -16,7 +16,13 @@
     "step": {
       "user": {
         "title": "Add IR Hub",
-        "description": "Choose a discovered TS1201 hub or select a ZHA device manually."
+        "description": "Found {count} TS1201 IR hub(s). Pick one or choose manual ZHA selection.",
+        "data": {
+          "hub_pick": "IR hub"
+        },
+        "options": {
+          "manual": "Select ZHA device manually"
+        }
       },
       "hub_manual": {
         "title": "Select IR Hub",

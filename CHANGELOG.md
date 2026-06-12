@@ -2,6 +2,13 @@
 
 All notable changes to EasyIR are documented here.
 
+## [0.1.1] - 2026-06-12
+
+### Fixed
+
+- Config flow hub picker: replace empty `async_show_menu` items with a dropdown listing discovered TS1201 hubs (labels visible).
+- Sync `translations/ru.json` and `translations/en.json` with hub-centric steps (removed stale `%optional_supported` text).
+
 ## [0.1.0] - 2026-06-12
 
 ### Added

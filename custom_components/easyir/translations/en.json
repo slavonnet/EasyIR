@@ -1,7 +1,12 @@
 {
   "config": {
     "abort": {
-      "zha_not_configured": "Configure ZHA first, then add EasyIR."
+      "zha_not_configured": "Configure ZHA first, then add EasyIR.",
+      "unknown_ieee": "Could not read Zigbee IEEE from the discovered device.",
+      "invalid_device": "Selected device was not found.",
+      "hub_not_found": "No EasyIR hub is configured to attach a remote.",
+      "invalid_import": "Remote import data is incomplete.",
+      "not_hub_entry": "Options are only available for IR hub entries."
     },
     "error": {
       "invalid_device": "Selected device was not found.",
@@ -10,39 +15,82 @@
     },
     "step": {
       "user": {
-        "title": "EasyIR",
-        "description": "Pick your ZHA IR device (picker prefers TS1201 models). Built-in profiles ship with EasyIR; custom path is optional.%optional_supported",
+        "title": "Add IR Hub",
+        "description": "Found {count} TS1201 IR hub(s). Pick one or choose manual ZHA selection.",
+        "data": {
+          "hub_pick": "IR hub"
+        },
+        "options": {
+          "manual": "Select ZHA device manually"
+        }
+      },
+      "hub_manual": {
+        "title": "Select IR Hub",
+        "description": "Pick your ZHA IR blaster (TS1201).",
         "data": {
           "zha_device": "ZHA device",
+          "endpoint_id": "Endpoint id"
+        }
+      },
+      "hub_confirm": {
+        "title": "Confirm IR Hub",
+        "description": "Configure {hub_name} and optionally add the first virtual remote.",
+        "data": {
+          "endpoint_id": "Endpoint id",
+          "add_remote": "Add IR remote now"
+        }
+      },
+      "hub_remote": {
+        "title": "Add IR Remote",
+        "description": "Attach a virtual remote profile to hub {hub_title}.",
+        "data": {
           "profile_choice": "IR profile",
-          "profile_path": "Custom profile path (only if you chose Custom path)",
-          "endpoint_id": "Default endpoint id"
+          "profile_path": "Custom profile path",
+          "remote_name": "Remote name"
+        }
+      },
+      "menu": {
+        "title": "Hub options",
+        "menu_options": {
+          "add_remote": "Add IR remote"
         }
       }
     }
   },
   "services": {
     "learn_once": {
-      "name": "Learn one IR code",
-      "description": "Enable learn mode for a configured IR hub and wait for one learned code.",
+      "name": "Start IR learn mode",
+      "description": "Enable learn mode on the hub (no attribute polling). Read code via read_learned_ir.",
       "fields": {
         "hub_id": {
-          "name": "EasyIR hub",
-          "description": "Optional EasyIR hub config entry id. If set, learn runs via this hub-specific profile."
+          "name": "Hub ID",
+          "description": "EasyIR hub config entry id."
         },
         "ieee": {
           "name": "IEEE",
-          "description": "Optional fallback when hub_id is not provided."
+          "description": "Zigbee IEEE of the IR hub."
         },
         "endpoint_id": {
           "name": "Endpoint id",
-          "description": "Optional endpoint override. If omitted, endpoint from selected hub/default entry is used."
+          "description": "Optional endpoint override."
         },
         "timeout_s": {
           "name": "Timeout (seconds)",
-          "description": "How long to wait for one code in learn mode."
+          "description": "Learn mode duration hint for the device."
         }
       }
+    },
+    "start_learn": {
+      "name": "Start IR learn mode",
+      "description": "Enable learn mode on the hub. Read code via read_learned_ir."
+    },
+    "read_learned_ir": {
+      "name": "Read learned IR code",
+      "description": "Single on-demand attribute read after learn mode was started."
+    },
+    "capture_inbound_ir": {
+      "name": "Capture inbound IR",
+      "description": "Listen for ZHA IR events for a limited time."
     }
   }
 }
