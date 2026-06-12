@@ -59,7 +59,7 @@
   },
   "config_subentries": {
     "ir_hub": {
-      "title": "IR-хаб",
+      "title": "Добавить хаб",
       "step": {
         "user": {
           "title": "Добавить IR-хаб",
@@ -86,7 +86,8 @@
         "zha_not_configured": "Сначала настройте ZHA.",
         "unknown_ieee": "Не удалось прочитать Zigbee IEEE у устройства.",
         "invalid_device": "Выбранное устройство не найдено.",
-        "already_configured": "Этот IR-хаб уже настроен."
+        "already_configured": "Этот IR-хаб уже настроен.",
+        "all_supported_hubs_added": "Все поддерживаемые хабы уже добавлены."
       },
       "error": {
         "invalid_device": "Выбранное устройство не найдено.",
@@ -94,11 +95,25 @@
       }
     },
     "ir_remote": {
-      "title": "ИК-пульт",
+      "title": "Добавить пульт",
       "step": {
         "user": {
           "title": "Добавить пульт",
-          "description": "Привязать виртуальный пульт к IR-хабу."
+          "description": "Выберите IR-хаб для нового пульта."
+        },
+        "remote_type": {
+          "title": "Тип пульта",
+          "description": "Выберите тип пульта для хаба {hub_title}.",
+          "data": {
+            "remote_type": "Тип пульта"
+          }
+        },
+        "remote_brand": {
+          "title": "Бренд",
+          "description": "Выберите бренд для хаба {hub_title}.",
+          "data": {
+            "remote_brand": "Бренд"
+          }
         },
         "hub_remote": {
           "title": "Добавить пульт",
@@ -112,11 +127,13 @@
         }
       },
       "abort": {
-        "hub_not_found": "Сначала добавьте IR-хаб."
+        "hub_not_found": "Сначала добавьте IR-хаб.",
+        "no_climate_profiles": "Во встроенной библиотеке нет климатических профилей."
       },
       "error": {
         "invalid_profile": "Выберите встроенный профиль или укажите корректный путь к JSON.",
-        "hub_not_found": "Выбранный хаб не найден."
+        "hub_not_found": "Выбранный хаб не найден.",
+        "invalid_remote_type": "Выберите корректный тип пульта."
       }
     }
   },

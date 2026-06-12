@@ -59,7 +59,7 @@
   },
   "config_subentries": {
     "ir_hub": {
-      "title": "IR Hub",
+      "title": "Add hub",
       "step": {
         "user": {
           "title": "Add IR Hub",
@@ -86,7 +86,8 @@
         "zha_not_configured": "Configure ZHA first.",
         "unknown_ieee": "Could not read Zigbee IEEE from the device.",
         "invalid_device": "Selected device was not found.",
-        "already_configured": "This IR hub is already configured."
+        "already_configured": "This IR hub is already configured.",
+        "all_supported_hubs_added": "All supported hubs are already added."
       },
       "error": {
         "invalid_device": "Selected device was not found.",
@@ -94,11 +95,25 @@
       }
     },
     "ir_remote": {
-      "title": "IR Remote",
+      "title": "Add remote",
       "step": {
         "user": {
           "title": "Add IR Remote",
-          "description": "Attach a virtual remote to an IR hub."
+          "description": "Choose an IR hub for the remote."
+        },
+        "remote_type": {
+          "title": "Remote type",
+          "description": "Select remote type for hub {hub_title}.",
+          "data": {
+            "remote_type": "Remote type"
+          }
+        },
+        "remote_brand": {
+          "title": "Brand",
+          "description": "Select brand for hub {hub_title}.",
+          "data": {
+            "remote_brand": "Brand"
+          }
         },
         "hub_remote": {
           "title": "Add IR Remote",
@@ -112,11 +127,13 @@
         }
       },
       "abort": {
-        "hub_not_found": "Add an IR hub before adding a remote."
+        "hub_not_found": "Add an IR hub before adding a remote.",
+        "no_climate_profiles": "No bundled climate profiles available."
       },
       "error": {
         "invalid_profile": "Pick a built-in profile or enter a valid custom file path.",
-        "hub_not_found": "Selected hub was not found."
+        "hub_not_found": "Selected hub was not found.",
+        "invalid_remote_type": "Select a valid remote type."
       }
     }
   },

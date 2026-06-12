@@ -35,9 +35,10 @@ backward-compatible services and an expanding protocol/transport core.
 3. **ZHA** must already be configured (TS1201 IR blaster).
 4. **First setup** — `Settings → Devices & Services → Add Integration → EasyIR`:
    - pick a **discovered TS1201 hub** or select ZHA device manually
-   - confirm hub (endpoint подбирается автоматически)
-   - optionally add first **remote** with profile (**Demo AC** or **LG P12RK / 7062**)
-5. **Later** — on the EasyIR integration card, **Add entry** → **Добавить IR-хаб** или **Добавить пульт**.
+   - set hub name + room (endpoint подбирается автоматически)
+   - finish directly on the EasyIR integration page
+5. **Later** — on the EasyIR integration card, **Add entry** → **Добавить хаб** или **Добавить пульт**.
+   - add remote wizard: **type → brand → model/profile**
 6. Hub entry **Configure** → same menu for hub/remote.
 7. Entities: `climate.*` (HVAC), `button.*` (off, ionizer, …).
 

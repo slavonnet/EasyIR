@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
+from pathlib import Path
 from typing import Any
 
 import voluptuous as vol
@@ -45,6 +47,10 @@ from .supported_hubs import ieee_from_zha_device, list_onboarding_hub_choices
 CONF_HUB_PICK = "hub_pick"
 CONF_ZHA_DEVICE = "zha_device"
 MENU_MANUAL = "manual"
+CONF_REMOTE_TYPE = "remote_type"
+CONF_REMOTE_BRAND = "remote_brand"
+REMOTE_TYPE_CLIMATE = "climate"
+REMOTE_TYPE_ADVANCED = "advanced"
 
 
 def _ieee_from_zha_device(device: dr.DeviceEntry) -> str | None:
@@ -117,6 +123,48 @@ def _manual_hub_schema(*, default_name: str = "") -> vol.Schema:
             vol.Optional(CONF_AREA_ID): selector.AreaSelector(),
         }
     )
+
+
+def _split_brand_model(label: str) -> tuple[str, str]:
+    """Split profile title into brand/model parts for remote wizard."""
+    normalized = str(label).strip()
+    if not normalized:
+        return "Other", "Unknown model"
+    if "—" in normalized:
+        left, right = normalized.split("—", 1)
+        brand = left.strip() or "Other"
+        model = right.strip() or "Unknown model"
+        return brand, model
+    if "-" in normalized:
+        left, right = normalized.split("-", 1)
+        brand = left.strip() or "Other"
+        model = right.strip() or "Unknown model"
+        return brand, model
+    return "Other", normalized
+
+
+def _climate_catalog_from_options(
+    profile_options: list[dict[str, str]],
+) -> dict[str, list[dict[str, str]]]:
+    """Build brand -> model selector options from bundled climate entries."""
+    grouped: dict[str, list[dict[str, str]]] = defaultdict(list)
+    for option in profile_options:
+        value = str(option.get("value", "")).strip()
+        if not (value.startswith("climate/") and value.endswith(".json")):
+            continue
+        label = str(option.get("label", value)).strip()
+        brand, model = _split_brand_model(label)
+        grouped[brand].append(
+            {
+                "value": value,
+                "label": model,
+            }
+        )
+    catalog: dict[str, list[dict[str, str]]] = {}
+    for brand in sorted(grouped, key=lambda item: item.lower()):
+        models = sorted(grouped[brand], key=lambda item: item["label"].lower())
+        catalog[brand] = models
+    return catalog
 
 
 def _resolve_hub_from_device(
@@ -374,7 +422,9 @@ class _HubPickMixin:
     ) -> FlowResult:
         discovered = list_onboarding_hub_choices(self.hass)
         if not discovered:
-            return await self.async_step_hub_manual()  # type: ignore[attr-defined]
+            return self.async_abort(  # type: ignore[attr-defined]
+                reason="all_supported_hubs_added"
+            )
 
         if user_input is not None:
             pick = str(user_input.get(CONF_HUB_PICK, "")).strip()
@@ -505,6 +555,10 @@ class IrRemoteSubentryFlow(ConfigSubentryFlow):
 
     def __init__(self) -> None:
         self._prefill_hub_id: str | None = None
+        self._selected_hub_id: str | None = None
+        self._selected_remote_type: str | None = None
+        self._selected_brand: str | None = None
+        self._profile_options_cache: list[dict[str, str]] | None = None
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -517,85 +571,269 @@ class IrRemoteSubentryFlow(ConfigSubentryFlow):
         prefill = str(self.context.get("hub_subentry_id", "")).strip()
         if prefill:
             self._prefill_hub_id = prefill
+            self._selected_hub_id = prefill
 
         errors: dict[str, str] = {}
-        profile_options = await async_select_selector_options(self.hass)
-        default_profile = profile_options[0]["value"] if profile_options else PROFILE_CUSTOM
-
-        hub_id = self._prefill_hub_id
         if user_input is not None:
             if CONF_HUB_SUBENTRY_ID in user_input:
-                hub_id = str(user_input[CONF_HUB_SUBENTRY_ID]).strip()
+                self._selected_hub_id = str(user_input[CONF_HUB_SUBENTRY_ID]).strip()
             elif CONF_HUB_ENTRY_ID in user_input:
-                hub_id = str(user_input[CONF_HUB_ENTRY_ID]).strip()
+                self._selected_hub_id = str(user_input[CONF_HUB_ENTRY_ID]).strip()
+            elif self._prefill_hub_id:
+                self._selected_hub_id = self._prefill_hub_id
 
-        if user_input is not None and CONF_PROFILE_CHOICE in user_input:
-            hub_id = hub_id or self._prefill_hub_id
-            if not hub_id or hub_ref_by_id(self.hass, hub_id) is None:
+            if not self._selected_hub_id or hub_ref_by_id(self.hass, self._selected_hub_id) is None:
                 errors["base"] = "hub_not_found"
             else:
-                profile_choice = user_input.get(CONF_PROFILE_CHOICE, default_profile)
-                custom_path = user_input.get(CONF_PROFILE_PATH)
-                try:
-                    resolved_path = resolve_stored_profile_path(
-                        str(profile_choice), custom_path
+                return await self.async_step_remote_type()
+
+        if self._selected_hub_id is None and len(hubs) == 1:
+            self._selected_hub_id = hubs[0].subentry_id
+
+        if self._selected_hub_id and hub_ref_by_id(self.hass, self._selected_hub_id):
+            return await self.async_step_remote_type()
+
+        return self.async_show_form(
+            step_id="user",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_HUB_SUBENTRY_ID): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=[
+                                {"value": h.subentry_id, "label": h.title} for h in hubs
+                            ],
+                            mode=selector.SelectSelectorMode.DROPDOWN,
+                        )
                     )
-                except ValueError:
+                }
+            ),
+            errors=errors,
+        )
+
+    async def async_step_remote_type(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        hub_id = self._selected_hub_id or self._prefill_hub_id
+        if not hub_id:
+            return self.async_abort(reason="hub_not_found")
+        hub = hub_ref_by_id(self.hass, hub_id)
+        if hub is None:
+            return self.async_abort(reason="hub_not_found")
+        self._selected_hub_id = hub_id
+
+        profile_options = await self._async_profile_options()
+        catalog = _climate_catalog_from_options(profile_options)
+        selector_options: list[dict[str, str]] = []
+        if catalog:
+            selector_options.append(
+                {"value": REMOTE_TYPE_CLIMATE, "label": "Climate / AC"}
+            )
+        selector_options.append(
+            {"value": REMOTE_TYPE_ADVANCED, "label": "Advanced profile selection"}
+        )
+        default_type = (
+            self._selected_remote_type
+            or (REMOTE_TYPE_CLIMATE if catalog else REMOTE_TYPE_ADVANCED)
+        )
+        available_values = {item["value"] for item in selector_options}
+        if default_type not in available_values:
+            default_type = selector_options[0]["value"]
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            remote_type = str(user_input.get(CONF_REMOTE_TYPE, "")).strip()
+            if remote_type not in available_values:
+                errors["base"] = "invalid_remote_type"
+            else:
+                self._selected_remote_type = remote_type
+                self._selected_brand = None
+                if remote_type == REMOTE_TYPE_CLIMATE:
+                    return await self.async_step_remote_brand()
+                return await self.async_step_hub_remote()
+
+        return self.async_show_form(
+            step_id="remote_type",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_REMOTE_TYPE, default=default_type): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=selector_options,
+                            mode=selector.SelectSelectorMode.DROPDOWN,
+                        )
+                    )
+                }
+            ),
+            errors=errors,
+            description_placeholders={"hub_title": hub.title},
+        )
+
+    async def async_step_remote_brand(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        hub_id = self._selected_hub_id or self._prefill_hub_id
+        hub = hub_ref_by_id(self.hass, hub_id or "")
+        if hub is None:
+            return self.async_abort(reason="hub_not_found")
+        self._selected_hub_id = hub.subentry_id
+
+        profile_options = await self._async_profile_options()
+        catalog = _climate_catalog_from_options(profile_options)
+        if not catalog:
+            return self.async_abort(reason="no_climate_profiles")
+
+        brands = sorted(catalog.keys(), key=lambda item: item.lower())
+        default_brand = self._selected_brand or brands[0]
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            brand = str(user_input.get(CONF_REMOTE_BRAND, "")).strip()
+            if brand not in catalog:
+                errors["base"] = "invalid_profile"
+            else:
+                self._selected_brand = brand
+                return await self.async_step_hub_remote()
+
+        return self.async_show_form(
+            step_id="remote_brand",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_REMOTE_BRAND, default=default_brand): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=[
+                                {"value": brand, "label": brand} for brand in brands
+                            ],
+                            mode=selector.SelectSelectorMode.DROPDOWN,
+                        )
+                    )
+                }
+            ),
+            errors=errors,
+            description_placeholders={"hub_title": hub.title},
+        )
+
+    async def async_step_hub_remote(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Final step: pick concrete profile and create remote subentry."""
+        hub_id = self._selected_hub_id or self._prefill_hub_id
+        if not hub_id:
+            return self.async_abort(reason="hub_not_found")
+        hub = hub_ref_by_id(self.hass, hub_id)
+        if hub is None:
+            return self.async_abort(reason="hub_not_found")
+        self._selected_hub_id = hub.subentry_id
+
+        profile_options = await self._async_profile_options()
+        catalog = _climate_catalog_from_options(profile_options)
+        default_profile = profile_options[0]["value"] if profile_options else PROFILE_CUSTOM
+        errors: dict[str, str] = {}
+        brand_placeholder = ""
+
+        if self._selected_remote_type == REMOTE_TYPE_CLIMATE:
+            if not catalog:
+                return self.async_abort(reason="no_climate_profiles")
+            brand = self._selected_brand or next(iter(catalog))
+            models = catalog.get(brand)
+            if not models:
+                return self.async_abort(reason="invalid_profile")
+            brand_placeholder = brand
+            model_values = {item["value"] for item in models}
+            model_default = models[0]["value"]
+            if user_input is not None:
+                profile_choice = str(
+                    user_input.get(CONF_PROFILE_CHOICE, model_default)
+                ).strip()
+                if profile_choice not in model_values:
                     errors["base"] = "invalid_profile"
                 else:
                     remote_name = str(user_input.get(CONF_REMOTE_NAME, "")).strip() or None
-                    from pathlib import Path
+                    resolved_path = resolve_stored_profile_path(profile_choice, None)
+                    return await self._async_create_remote_subentry(
+                        hub_id=hub.subentry_id,
+                        profile_path=resolved_path,
+                        remote_name=remote_name,
+                    )
 
-                    slug = Path(resolved_path).stem
-                    unique = f"{hub_id}_{slug}"
-                    await self.async_set_unique_id(unique)
-                    self._abort_if_unique_id_configured()
-                    return self.async_create_entry(
-                        title=remote_name or f"Remote {slug}",
-                        data=remote_subentry_data(
-                            hub_subentry_id=hub_id,
-                            profile_path=resolved_path,
-                            remote_name=remote_name,
+            return self.async_show_form(
+                step_id="hub_remote",
+                data_schema=vol.Schema(
+                    {
+                        vol.Required(CONF_PROFILE_CHOICE, default=model_default): selector.SelectSelector(
+                            selector.SelectSelectorConfig(
+                                options=models,
+                                mode=selector.SelectSelectorMode.DROPDOWN,
+                            )
                         ),
-                        unique_id=unique,
-                    )
+                        vol.Optional(CONF_REMOTE_NAME): selector.TextSelector(),
+                    }
+                ),
+                errors=errors,
+                description_placeholders={
+                    "hub_title": hub.title,
+                    "remote_brand": brand_placeholder,
+                },
+            )
 
-        need_hub_pick = hub_id is None and len(hubs) > 1
-        schema_fields: dict[vol.Marker, Any] = {}
-        if need_hub_pick:
-            schema_fields[vol.Required(CONF_HUB_SUBENTRY_ID)] = selector.SelectSelector(
-                selector.SelectSelectorConfig(
-                    options=[
-                        {"value": h.subentry_id, "label": h.title} for h in hubs
-                    ],
-                    mode=selector.SelectSelectorMode.DROPDOWN,
+        # Advanced path: full selector + optional custom profile path.
+        if user_input is not None:
+            profile_choice = str(user_input.get(CONF_PROFILE_CHOICE, default_profile))
+            custom_path = user_input.get(CONF_PROFILE_PATH)
+            try:
+                resolved_path = resolve_stored_profile_path(profile_choice, custom_path)
+            except ValueError:
+                errors["base"] = "invalid_profile"
+            else:
+                remote_name = str(user_input.get(CONF_REMOTE_NAME, "")).strip() or None
+                return await self._async_create_remote_subentry(
+                    hub_id=hub.subentry_id,
+                    profile_path=resolved_path,
+                    remote_name=remote_name,
                 )
-            )
-        else:
-            resolved_hub = hub_id or hubs[0].subentry_id
-            hub = hub_ref_by_id(self.hass, resolved_hub)
-            if hub is None:
-                return self.async_abort(reason="hub_not_found")
-            schema_fields[vol.Required(CONF_PROFILE_CHOICE, default=default_profile)] = (
-                selector.SelectSelector(
-                    selector.SelectSelectorConfig(
-                        options=profile_options,
-                        mode=selector.SelectSelectorMode.DROPDOWN,
-                    )
-                )
-            )
-            schema_fields[vol.Optional(CONF_PROFILE_PATH)] = selector.TextSelector(
-                selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT)
-            )
-            schema_fields[vol.Optional(CONF_REMOTE_NAME)] = selector.TextSelector()
 
         return self.async_show_form(
             step_id="hub_remote",
-            data_schema=vol.Schema(schema_fields),
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_PROFILE_CHOICE, default=default_profile): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=profile_options,
+                            mode=selector.SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                    vol.Optional(CONF_PROFILE_PATH): selector.TextSelector(
+                        selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT)
+                    ),
+                    vol.Optional(CONF_REMOTE_NAME): selector.TextSelector(),
+                }
+            ),
             errors=errors,
             description_placeholders={
-                "hub_title": hub_ref_by_id(self.hass, hub_id or hubs[0].subentry_id).title
-                if hub_ref_by_id(self.hass, hub_id or hubs[0].subentry_id)
-                else ""
+                "hub_title": hub.title,
+                "remote_brand": brand_placeholder,
             },
+        )
+
+    async def _async_profile_options(self) -> list[dict[str, str]]:
+        if self._profile_options_cache is not None:
+            return list(self._profile_options_cache)
+        self._profile_options_cache = await async_select_selector_options(self.hass)
+        return list(self._profile_options_cache)
+
+    async def _async_create_remote_subentry(
+        self,
+        *,
+        hub_id: str,
+        profile_path: str,
+        remote_name: str | None,
+    ) -> FlowResult:
+        slug = Path(profile_path).stem
+        unique = f"{hub_id}_{slug}"
+        await self.async_set_unique_id(unique)
+        self._abort_if_unique_id_configured()
+        return self.async_create_entry(
+            title=remote_name or f"Remote {slug}",
+            data=remote_subentry_data(
+                hub_subentry_id=hub_id,
+                profile_path=profile_path,
+                remote_name=remote_name,
+            ),
+            unique_id=unique,
         )

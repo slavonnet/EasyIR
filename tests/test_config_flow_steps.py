@@ -5,6 +5,7 @@ from __future__ import annotations
 import unittest
 
 from custom_components.easyir.config_flow import (
+    _climate_catalog_from_options,
     EasyIrConfigFlow,
     IrHubSubentryFlow,
     IrRemoteSubentryFlow,
@@ -27,6 +28,31 @@ class TestConfigFlowSteps(unittest.TestCase):
 
     def test_manual_hub_step_exists(self) -> None:
         self.assertTrue(callable(getattr(EasyIrConfigFlow, "async_step_hub_manual", None)))
+
+    def test_remote_subentry_has_expected_steps(self) -> None:
+        self.assertTrue(callable(getattr(IrRemoteSubentryFlow, "async_step_user", None)))
+        self.assertTrue(
+            callable(getattr(IrRemoteSubentryFlow, "async_step_remote_type", None))
+        )
+        self.assertTrue(
+            callable(getattr(IrRemoteSubentryFlow, "async_step_remote_brand", None))
+        )
+        self.assertTrue(
+            callable(getattr(IrRemoteSubentryFlow, "async_step_hub_remote", None))
+        )
+
+    def test_climate_catalog_groups_brand_and_model(self) -> None:
+        options = [
+            {"value": "climate/7062.json", "label": "LG — P12RK"},
+            {"value": "climate/7386.json", "label": "Midea — KFR-32GW"},
+            {"value": "demo_ac", "label": "Demo AC"},
+        ]
+        catalog = _climate_catalog_from_options(options)
+        self.assertIn("LG", catalog)
+        self.assertEqual(catalog["LG"][0]["value"], "climate/7062.json")
+        self.assertEqual(catalog["LG"][0]["label"], "P12RK")
+        self.assertIn("Midea", catalog)
+        self.assertNotIn("Demo AC", catalog)
 
 
 if __name__ == "__main__":

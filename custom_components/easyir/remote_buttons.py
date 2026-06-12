@@ -169,7 +169,8 @@ def list_remote_button_specs(profile_path: str) -> list[RemoteButtonSpec]:
             specs.append(
                 RemoteButtonSpec(
                     key="off",
-                    label="Power off",
+                    # LG off command is effectively a power toggle on many units.
+                    label="Power toggle",
                     action="off",
                     kind=ButtonCommandKind.STATE_FRAME,
                 )
