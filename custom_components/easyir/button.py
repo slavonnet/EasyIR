@@ -10,9 +10,15 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import CONF_PROFILE_PATH, CONF_REMOTE_NAME, DOMAIN, ENTRY_KIND_REMOTE
+from .const import CONF_PROFILE_PATH, DOMAIN
 from .devices import hub_device_identifier, remote_device_identifier
-from .hub_registry import entry_kind, hub_entries_for_remote, primary_hub_entry, remote_display_name
+from .hub_registry import (
+    RemoteRef,
+    hub_refs_for_remote,
+    iter_remote_refs,
+    primary_hub_ref,
+    remote_display_name,
+)
 from .remote_buttons import ButtonCommandKind, RemoteButtonSpec, list_remote_button_specs
 from .remote_events import async_fire_button_pressed, async_send_profile_to_hubs
 
@@ -22,13 +28,14 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up remote button entities for a remote config entry."""
-    if entry_kind(entry) != ENTRY_KIND_REMOTE:
-        return
-    profile_path = str(entry.data[CONF_PROFILE_PATH])
-    specs = await hass.async_add_executor_job(list_remote_button_specs, profile_path)
-    entities = [EasyIrRemoteButton(hass, entry, spec) for spec in specs]
-    async_add_entities(entities, True)
+    """Set up remote button entities for remote subentries."""
+    entities: list[EasyIrRemoteButton] = []
+    for remote in iter_remote_refs(hass, entry):
+        profile_path = str(remote.data[CONF_PROFILE_PATH])
+        specs = await hass.async_add_executor_job(list_remote_button_specs, profile_path)
+        entities.extend(EasyIrRemoteButton(hass, remote, spec) for spec in specs)
+    if entities:
+        async_add_entities(entities, True)
 
 
 class EasyIrRemoteButton(ButtonEntity):
@@ -39,20 +46,20 @@ class EasyIrRemoteButton(ButtonEntity):
     def __init__(
         self,
         hass: HomeAssistant,
-        entry: ConfigEntry,
+        remote: RemoteRef,
         spec: RemoteButtonSpec,
     ) -> None:
         self.hass = hass
-        self._entry = entry
+        self._remote = remote
         self._spec = spec
         self._pressed = False
-        hub = primary_hub_entry(hass, entry)
-        hub_ident = hub_device_identifier(hub.entry_id) if hub else None
-        self._attr_unique_id = f"{entry.entry_id}_btn_{spec.key}"
+        hub = primary_hub_ref(hass, remote)
+        hub_ident = hub_device_identifier(hub.subentry_id) if hub else None
+        self._attr_unique_id = f"{remote.subentry_id}_btn_{spec.key}"
         self._attr_name = spec.label
         self._attr_device_info = DeviceInfo(
-            identifiers={remote_device_identifier(entry.entry_id)},
-            name=remote_display_name(entry),
+            identifiers={remote_device_identifier(remote.subentry_id)},
+            name=remote_display_name(remote),
             manufacturer="EasyIR",
             model="Virtual IR Remote",
             via_device=hub_ident,
@@ -60,8 +67,8 @@ class EasyIrRemoteButton(ButtonEntity):
         self._attr_extra_state_attributes = {
             "button_key": spec.key,
             "command_kind": spec.kind.value,
-            "remote_entry_id": entry.entry_id,
-            "hub_entry_ids": [h.entry_id for h in hub_entries_for_remote(hass, entry)],
+            "remote_entry_id": remote.subentry_id,
+            "hub_entry_ids": [h.subentry_id for h in hub_refs_for_remote(hass, remote)],
             "pressed": False,
         }
         if spec.feature_key:
@@ -74,12 +81,12 @@ class EasyIrRemoteButton(ButtonEntity):
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         registry = self.hass.data.setdefault(DOMAIN, {}).setdefault("remote_buttons", {})
-        registry[(self._entry.entry_id, self._spec.key)] = self
+        registry[(self._remote.subentry_id, self._spec.key)] = self
 
     async def async_will_remove_from_hass(self) -> None:
         await super().async_will_remove_from_hass()
         registry = self.hass.data.get(DOMAIN, {}).get("remote_buttons", {})
-        registry.pop((self._entry.entry_id, self._spec.key), None)
+        registry.pop((self._remote.subentry_id, self._spec.key), None)
 
     def _write_pressed_state(self, pressed: bool) -> None:
         self._pressed = pressed
@@ -99,7 +106,7 @@ class EasyIrRemoteButton(ButtonEntity):
         self._write_pressed_state(True)
         async_fire_button_pressed(
             self.hass,
-            remote_entry_id=self._entry.entry_id,
+            remote_entry_id=self._remote.subentry_id,
             button_key=self._spec.key,
             send_ir=send_ir,
             state_change_only=state_change_only,
@@ -115,7 +122,7 @@ class EasyIrRemoteButton(ButtonEntity):
                 temperature = None
             await async_send_profile_to_hubs(
                 self.hass,
-                remote_entry=self._entry,
+                remote=self._remote,
                 action=self._spec.action,
                 hvac_mode=hvac_mode,
                 fan_mode=fan_mode,

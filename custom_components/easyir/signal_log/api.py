@@ -13,7 +13,7 @@ from homeassistant.components import http
 from homeassistant.core import HomeAssistant, callback
 
 from ..const import CONF_HUB_ID, CONF_IEEE, DOMAIN
-from ..hub_registry import iter_hub_entries
+from ..hub_registry import iter_hub_refs
 from ..learn import (
     async_detect_ir_learn_profile,
     async_resolve_learn_target,
@@ -445,18 +445,18 @@ class EasyIrSignalLogHubsView(http.HomeAssistantView):
     async def get(self, request: web.Request) -> web.Response:
         hass: HomeAssistant = request.app[http.KEY_HASS]
         hubs: list[dict[str, Any]] = []
-        for entry in iter_hub_entries(hass):
-            ieee_raw = entry.data.get(CONF_IEEE)
+        for hub in iter_hub_refs(hass):
+            ieee_raw = hub.data.get(CONF_IEEE)
             ieee = str(ieee_raw).strip() if ieee_raw else None
-            endpoint_raw = entry.data.get("endpoint_id")
+            endpoint_raw = hub.data.get("endpoint_id")
             endpoint_id = int(endpoint_raw) if endpoint_raw is not None else None
             vendor_profile: str | None = None
             if ieee:
                 vendor_profile = await async_detect_ir_learn_profile(hass, ieee)
             hubs.append(
                 {
-                    "hub_id": entry.entry_id,
-                    "title": entry.title,
+                    "hub_id": hub.subentry_id,
+                    "title": hub.title,
                     "ieee": ieee,
                     "endpoint_id": endpoint_id,
                     "vendor_profile": vendor_profile,

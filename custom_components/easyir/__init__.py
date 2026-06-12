@@ -7,12 +7,11 @@ import logging
 from typing import Any
 
 import voluptuous as vol
-from homeassistant import config_entries
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
 
-from .config_flow import EasyIrConfigFlow
+from .command_pool import DEFAULT_POOL_INTERVAL_S, get_service_call_pool
 from .const import (
     CONF_ENDPOINT_ID,
     CONF_HUB_ID,
@@ -32,16 +31,14 @@ from .const import (
     SERVICE_STOP_LEARN,
     TS1201_ENDPOINT_ID,
 )
-from .command_pool import DEFAULT_POOL_INTERVAL_S, get_service_call_pool
-from .devices import async_setup_hub_device, async_setup_remote_device
+from .devices import async_setup_devices_for_entry
 from .discovery import async_schedule_hub_discovery
 from .hub_registry import (
-    hub_entry_by_id,
-    hub_entry_for_ieee,
+    hub_ref_by_id,
+    hub_ref_for_ieee,
     hub_transport_data,
-    is_hub_entry,
-    is_remote_entry,
-    iter_hub_entries,
+    iter_hub_refs,
+    parent_entry,
 )
 from .ir_core.service_adapter import (
     encode_profile_command_for_zha_ts1201,
@@ -53,6 +50,7 @@ from .learn import (
     start_learn_mode,
     stop_learn_mode,
 )
+from .migration import async_migrate_entry
 from .remote_events import async_setup_remote_button_listener
 from .signal_log.api import async_register_signal_log_api
 from .signal_log.ha_bridge import (
@@ -89,66 +87,6 @@ async def _async_encode_profile_command_for_transport(
     return await hass.async_add_executor_job(encode_call)
 
 
-def _split_legacy_entry_data(data: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any] | None]:
-    """Split pre-v3 combined entry into hub and optional remote payloads."""
-    hub_data = {
-        "entry_kind": "hub",
-        "ieee": data[CONF_IEEE],
-        "endpoint_id": int(data.get(CONF_ENDPOINT_ID, DEFAULT_ENDPOINT_ID)),
-        "transport": "ts1201_zha",
-    }
-    remote_data = None
-    if CONF_PROFILE_PATH in data:
-        remote_data = {
-            "entry_kind": "remote",
-            "profile_path": data[CONF_PROFILE_PATH],
-            "ieee": data[CONF_IEEE],
-        }
-    return hub_data, remote_data
-
-
-async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Migrate stored config to hub-centric model (v3)."""
-    if entry.version > EasyIrConfigFlow.VERSION:
-        return False
-
-    data = dict(entry.data)
-    if entry.version < 3:
-        hub_data, remote_data = _split_legacy_entry_data(data)
-        hass.config_entries.async_update_entry(
-            entry,
-            title=entry.title or f"IR Hub {hub_data[CONF_IEEE]}",
-            data=hub_data,
-            version=3,
-            minor_version=EasyIrConfigFlow.MINOR_VERSION,
-        )
-        if remote_data is not None:
-            from pathlib import Path
-
-            slug = Path(str(remote_data[CONF_PROFILE_PATH])).stem
-            unique = f"{entry.entry_id}_{slug}"
-            hass.config_entries.flow.async_init(
-                DOMAIN,
-                context={"source": config_entries.SOURCE_IMPORT},
-                data={
-                    "hub_entry_id": entry.entry_id,
-                    "profile_path": remote_data[CONF_PROFILE_PATH],
-                    "unique_id": unique,
-                },
-            )
-        return True
-
-    if entry.version < 2:
-        data.setdefault(CONF_ENDPOINT_ID, DEFAULT_ENDPOINT_ID)
-        hass.config_entries.async_update_entry(
-            entry,
-            data=data,
-            version=EasyIrConfigFlow.VERSION,
-            minor_version=EasyIrConfigFlow.MINOR_VERSION,
-        )
-    return True
-
-
 def _resolve_hub_from_call(hass: HomeAssistant, call: ServiceCall) -> dict[str, Any]:
     hub_id = str(call.data.get(CONF_HUB_ID, "")).strip() or None
     ieee = call.data.get(CONF_IEEE)
@@ -156,20 +94,20 @@ def _resolve_hub_from_call(hass: HomeAssistant, call: ServiceCall) -> dict[str, 
         ieee = str(ieee).strip() or None
 
     if hub_id:
-        entry = hub_entry_by_id(hass, hub_id)
-        if entry is None:
+        hub = hub_ref_by_id(hass, hub_id)
+        if hub is None:
             raise vol.Invalid(f"Unknown hub_id: {hub_id}")
-        if ieee and ieee.lower().replace(" ", "") != str(entry.data[CONF_IEEE]).lower().replace(" ", ""):
+        if ieee and ieee.lower().replace(" ", "") != str(hub.data[CONF_IEEE]).lower().replace(" ", ""):
             raise vol.Invalid("hub_id and ieee refer to different hubs")
-        return hub_transport_data(entry)
+        return hub_transport_data(hub)
 
     if ieee:
-        entry = hub_entry_for_ieee(hass, ieee)
-        if entry is None:
+        hub = hub_ref_for_ieee(hass, ieee)
+        if hub is None:
             raise vol.Invalid(f"No EasyIR hub configured for ieee: {ieee}")
-        return hub_transport_data(entry)
+        return hub_transport_data(hub)
 
-    hubs = iter_hub_entries(hass)
+    hubs = iter_hub_refs(hass)
     if len(hubs) == 1:
         return hub_transport_data(hubs[0])
     raise vol.Invalid("Missing hub target: provide hub_id or ieee")
@@ -385,57 +323,22 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     return True
 
 
-async def _async_offer_remote_setup(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Legacy: chain remote flow after hub setup (prefer same-flow hub_confirm path)."""
-    if not entry.data.get("offer_remote_setup"):
-        return
-    data = dict(entry.data)
-    data.pop("offer_remote_setup", None)
-    hass.config_entries.async_update_entry(entry, data=data)
-
-    async def _start_remote_flow() -> None:
-        from .const import FLOW_SOURCE_HUB_REMOTE
-
-        await hass.config_entries.flow.async_init(
-            DOMAIN,
-            context={
-                "source": FLOW_SOURCE_HUB_REMOTE,
-                "hub_entry_id": entry.entry_id,
-            },
-        )
-
-    hass.async_create_task(_start_remote_flow())
-
-
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up EasyIR hub or remote config entry."""
+    """Set up the single EasyIR parent config entry."""
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN].setdefault("climate_entities", {})
     hass.data[DOMAIN].setdefault("remote_buttons", {})
     hass.data[DOMAIN].setdefault("ir_transport", Ts1201ZhaTransport())
-    hass.data[DOMAIN][entry.entry_id] = entry.data
+    hass.data[DOMAIN][entry.entry_id] = entry
 
-    platforms: list[str] = []
-    if is_remote_entry(entry):
-        platforms = list(PLATFORMS)
-    if is_hub_entry(entry):
-        await async_setup_hub_device(hass, entry)
-        await _async_offer_remote_setup(hass, entry)
-    if is_remote_entry(entry):
-        await async_setup_remote_device(hass, entry)
-
-    if platforms:
-        await hass.config_entries.async_forward_entry_setups(entry, platforms)
-
+    await async_setup_devices_for_entry(hass, entry)
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     await async_register_signal_log_panel(hass)
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload a config entry."""
-    if not is_remote_entry(entry):
-        hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
-        return True
+    """Unload the EasyIR parent config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
     return unload_ok

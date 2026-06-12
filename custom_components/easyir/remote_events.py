@@ -6,19 +6,19 @@ import logging
 from functools import partial
 from typing import Any
 
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 
 from .const import (
     CONF_BUTTON_KEY,
     CONF_ENDPOINT_ID,
     CONF_PROFILE_PATH,
+    CONF_SEND_IR,
     CONF_STATE_CHANGE_ONLY,
     DOMAIN,
     EVENT_REMOTE_BUTTON_COMMAND,
     EVENT_REMOTE_BUTTON_PRESSED,
 )
-from .hub_registry import hub_entries_for_remote, hub_transport_data
+from .hub_registry import RemoteRef, hub_refs_for_remote, hub_transport_data
 from .ir_core.service_adapter import encode_profile_command_for_zha_ts1201
 from .signal_log.ha_bridge import log_outbound_send
 from .transports.base import IrTransport, TransportSendContext
@@ -29,7 +29,7 @@ _LOGGER = logging.getLogger(__name__)
 async def async_send_profile_to_hubs(
     hass: HomeAssistant,
     *,
-    remote_entry: ConfigEntry,
+    remote: RemoteRef,
     action: str,
     hvac_mode: str | None = None,
     fan_mode: str | None = None,
@@ -37,7 +37,7 @@ async def async_send_profile_to_hubs(
     entity_id: str | None = None,
 ) -> None:
     """Resolve profile command and transmit through every hub linked to the remote."""
-    profile_path = str(remote_entry.data[CONF_PROFILE_PATH])
+    profile_path = str(remote.data[CONF_PROFILE_PATH])
     encode_call = partial(
         encode_profile_command_for_zha_ts1201,
         profile_path=profile_path,
@@ -48,7 +48,7 @@ async def async_send_profile_to_hubs(
     )
     frame, code = await hass.async_add_executor_job(encode_call)
     transport: IrTransport = hass.data[DOMAIN]["ir_transport"]
-    for hub in hub_entries_for_remote(hass, remote_entry):
+    for hub in hub_refs_for_remote(hass, remote):
         hub_data = hub_transport_data(hub)
         ieee = hub_data["ieee"]
         endpoint_id = int(hub_data.get(CONF_ENDPOINT_ID, 1))

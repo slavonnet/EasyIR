@@ -79,10 +79,16 @@ class TestAsyncMigrateEntry(unittest.IsolatedAsyncioTestCase):
 
         ok = await easyir_pkg.async_migrate_entry(self.hass, entry)
         self.assertTrue(ok)
-        self.assertEqual(entry.version, 3)
-        self.assertEqual(entry.data["entry_kind"], "hub")
-        self.assertEqual(entry.data["ieee"], data["ieee"])
-        self.assertEqual(entry.data["endpoint_id"], data["endpoint_id"])
+        self.assertEqual(entry.version, 4)
+        self.assertEqual(entry.title, "EasyIR")
+        self.assertEqual(len(entry.subentries), 2)
+        hub_subentries = [
+            s for s in entry.subentries.values() if s.subentry_type == "ir_hub"
+        ]
+        self.assertEqual(len(hub_subentries), 1)
+        hub = hub_subentries[0]
+        self.assertEqual(hub.data["ieee"], data["ieee"])
+        self.assertEqual(hub.data["endpoint_id"], data["endpoint_id"])
 
     async def test_migrate_v1_adds_missing_endpoint_id(self) -> None:
         path = _demo_profile_path()
@@ -95,10 +101,10 @@ class TestAsyncMigrateEntry(unittest.IsolatedAsyncioTestCase):
 
         ok = await easyir_pkg.async_migrate_entry(self.hass, entry)
         self.assertTrue(ok)
-        self.assertEqual(entry.version, 3)
-        self.assertEqual(entry.data["entry_kind"], "hub")
-        self.assertEqual(entry.data["ieee"], "aa:bb:cc:dd:ee:ff")
-        self.assertEqual(entry.data["endpoint_id"], 1)
+        self.assertEqual(entry.version, 4)
+        hub = next(iter(entry.subentries.values()))
+        self.assertEqual(hub.data["ieee"], "aa:bb:cc:dd:ee:ff")
+        self.assertEqual(hub.data["endpoint_id"], 1)
 
     async def test_migrate_rejects_unknown_future_entry_version(self) -> None:
         entry = _make_entry(
@@ -122,8 +128,9 @@ class TestAsyncMigrateEntry(unittest.IsolatedAsyncioTestCase):
 
         ok = await entry.async_migrate(self.hass)
         self.assertTrue(ok)
-        self.assertEqual(entry.version, 3)
-        self.assertEqual(entry.data["endpoint_id"], 1)
+        self.assertEqual(entry.version, 4)
+        hub = next(iter(entry.subentries.values()))
+        self.assertEqual(hub.data["endpoint_id"], 1)
 
 
 class TestMigratedEntryProfileSendRegression(unittest.TestCase):

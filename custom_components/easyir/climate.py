@@ -15,12 +15,12 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import CONF_PROFILE_PATH, DOMAIN, ENTRY_KIND_REMOTE
+from .const import CONF_PROFILE_PATH, DOMAIN
 from .devices import hub_device_identifier, remote_device_identifier
 from .hub_registry import (
-    entry_kind,
-    hub_entries_for_remote,
-    primary_hub_entry,
+    RemoteRef,
+    hub_refs_for_remote,
+    iter_remote_refs,
     remote_display_name,
 )
 from .protocols.lg_p12rk import climate_capability_view
@@ -32,12 +32,14 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up EasyIR climate entity from a remote config entry."""
-    if entry_kind(entry) != ENTRY_KIND_REMOTE:
-        return
-    profile_path = str(entry.data[CONF_PROFILE_PATH])
-    cap_view = await hass.async_add_executor_job(climate_capability_view, profile_path)
-    async_add_entities([EasyIrClimate(hass, entry, cap_view=cap_view)], True)
+    """Set up EasyIR climate entities from remote subentries."""
+    entities: list[EasyIrClimate] = []
+    for remote in iter_remote_refs(hass, entry):
+        profile_path = str(remote.data[CONF_PROFILE_PATH])
+        cap_view = await hass.async_add_executor_job(climate_capability_view, profile_path)
+        entities.append(EasyIrClimate(hass, remote, cap_view=cap_view))
+    if entities:
+        async_add_entities(entities, True)
 
 
 class EasyIrClimate(ClimateEntity):
@@ -54,30 +56,30 @@ class EasyIrClimate(ClimateEntity):
     _attr_target_temperature_step = 1
 
     def __init__(
-        self, hass: HomeAssistant, entry: ConfigEntry, *, cap_view: dict[str, Any] | None = None
+        self, hass: HomeAssistant, remote: RemoteRef, *, cap_view: dict[str, Any] | None = None
     ) -> None:
         """Initialize entity."""
         self.hass = hass
-        self._entry = entry
-        self._profile_path = str(entry.data[CONF_PROFILE_PATH])
+        self._remote = remote
+        self._profile_path = str(remote.data[CONF_PROFILE_PATH])
         self._cap_view = cap_view or {"protocol": "legacy_profile", "pilot": False}
         self._attr_extra_state_attributes = {}
         self._apply_capability_view(self._cap_view)
-        self._attr_unique_id = f"{entry.entry_id}_climate"
-        hub = primary_hub_entry(hass, entry)
-        hub_ident = hub_device_identifier(hub.entry_id) if hub else None
+        self._attr_unique_id = f"{remote.subentry_id}_climate"
+        hub = hub_refs_for_remote(hass, remote)
+        hub_ident = hub_device_identifier(hub[0].subentry_id) if hub else None
         self._attr_device_info = DeviceInfo(
-            identifiers={remote_device_identifier(entry.entry_id)},
+            identifiers={remote_device_identifier(remote.subentry_id)},
             manufacturer="EasyIR",
             model="Virtual IR Remote",
-            name=remote_display_name(entry),
+            name=remote_display_name(remote),
             via_device=hub_ident,
         )
         self._attr_hvac_mode = HVACMode.OFF
         self._attr_fan_mode = "auto"
         self._attr_target_temperature = 24
         self._attr_extra_state_attributes = {
-            "hub_entry_ids": [h.entry_id for h in hub_entries_for_remote(hass, entry)],
+            "hub_entry_ids": [h.subentry_id for h in hub_refs_for_remote(hass, remote)],
         }
 
     def _apply_capability_view(self, view: dict) -> None:
@@ -117,7 +119,7 @@ class EasyIrClimate(ClimateEntity):
             "easyir_ionizer_supported": bool(view.get("ionizer_supported")),
             "easyir_energy_saving_supported": bool(view.get("energy_saving_supported")),
             "easyir_auto_clean_supported": bool(view.get("auto_clean_supported")),
-            "hub_entry_ids": [h.entry_id for h in hub_entries_for_remote(self.hass, self._entry)],
+            "hub_entry_ids": [h.subentry_id for h in hub_refs_for_remote(self.hass, self._remote)],
         }
 
     async def async_added_to_hass(self) -> None:
@@ -164,7 +166,7 @@ class EasyIrClimate(ClimateEntity):
         """Send command via remote profile to all linked hubs."""
         await async_send_profile_to_hubs(
             self.hass,
-            remote_entry=self._entry,
+            remote=self._remote,
             action=str(data["action"]),
             hvac_mode=data.get("hvac_mode"),
             fan_mode=data.get("fan_mode"),
