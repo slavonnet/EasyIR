@@ -32,7 +32,7 @@ from .const import (
     TS1201_ENDPOINT_ID,
 )
 from .devices import async_setup_devices_for_entry
-from .discovery import async_schedule_hub_discovery
+from .discovery import async_request_hub_discovery_scan, async_schedule_hub_discovery
 from .hub_registry import (
     hub_ref_by_id,
     hub_ref_for_ieee,
@@ -60,6 +60,7 @@ from .signal_log.ha_bridge import (
     log_outbound_send,
 )
 from .signal_log.panel import async_register_signal_log_panel
+from .ui_api import async_register_easyir_ui_api
 from .transports import Ts1201ZhaTransport
 from .transports.base import IrTransport, TransportSendContext
 
@@ -169,6 +170,7 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     async_setup_inbound_listener(hass)
     async_setup_remote_button_listener(hass)
     async_register_signal_log_api(hass)
+    async_register_easyir_ui_api(hass)
     async_schedule_hub_discovery(hass)
 
     async def handle_send_raw(call: ServiceCall) -> None:
@@ -328,6 +330,7 @@ async def _async_entry_update_listener(
 ) -> None:
     """Keep EasyIR device tree in sync after entry/subentry changes."""
     await async_setup_devices_for_entry(hass, entry)
+    async_request_hub_discovery_scan(hass)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -342,6 +345,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await async_setup_devices_for_entry(hass, entry)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     await async_register_signal_log_panel(hass)
+    async_request_hub_discovery_scan(hass)
     return True
 
 

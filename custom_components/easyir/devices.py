@@ -101,10 +101,59 @@ async def async_setup_remote_device(
 
 async def async_setup_devices_for_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Register all hub and remote devices for the parent config entry."""
-    for hub in iter_hub_refs(hass, entry):
+    hubs = iter_hub_refs(hass, entry)
+    remotes = iter_remote_refs(hass, entry)
+
+    # Keep registry clean when hubs/remotes are removed from subentries.
+    await async_cleanup_removed_subentry_devices(hass, entry, hubs=hubs, remotes=remotes)
+
+    for hub in hubs:
         await async_setup_hub_device(hass, entry, hub)
-    for remote in iter_remote_refs(hass, entry):
+    for remote in remotes:
         from .hub_registry import primary_hub_ref
 
         hub = primary_hub_ref(hass, remote)
         await async_setup_remote_device(hass, entry, remote, hub)
+
+
+def _easyir_device_identifiers(device: dr.DeviceEntry) -> set[tuple[str, str]]:
+    out: set[tuple[str, str]] = set()
+    for domain, ident in device.identifiers:
+        if domain != DOMAIN:
+            continue
+        if ident.startswith(HUB_DEVICE_PREFIX) or ident.startswith(REMOTE_DEVICE_PREFIX):
+            out.add((domain, ident))
+    return out
+
+
+async def async_cleanup_removed_subentry_devices(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    *,
+    hubs: list[HubRef],
+    remotes: list[RemoteRef],
+) -> None:
+    """Drop stale EasyIR device links after hub/remote subentry deletion."""
+    reg = dr.async_get(hass)
+    active_identifiers: set[tuple[str, str]] = {
+        hub_device_identifier(h.subentry_id) for h in hubs
+    } | {remote_device_identifier(r.subentry_id) for r in remotes}
+
+    for device in dr.async_entries_for_config_entry(reg, entry.entry_id):
+        easyir_idents = _easyir_device_identifiers(device)
+        if not easyir_idents:
+            continue
+        stale_idents = easyir_idents - active_identifiers
+        if not stale_idents:
+            continue
+
+        has_active_easyir_ident = bool(easyir_idents & active_identifiers)
+        if has_active_easyir_ident:
+            reg.async_update_device(
+                device.id,
+                new_identifiers=set(device.identifiers) - stale_idents,
+            )
+            continue
+
+        # No active EasyIR subentries map to this device anymore.
+        reg.async_update_device(device.id, remove_config_entry_id=entry.entry_id)

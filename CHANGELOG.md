@@ -2,6 +2,53 @@
 
 All notable changes to EasyIR are documented here.
 
+## [0.2.5] - 2026-06-12
+
+### Fixed
+
+- Hub/remote re-attach stability:
+  - removed false-positive unique-id blocking in subentry add flows that could prevent re-adding a deleted hub/remote in the same HA session,
+  - added cleanup of stale EasyIR device links in device registry after subentry deletion.
+- EasyIR page tree/UX:
+  - tree rendering is kept strictly two-level (`Hub -> Remote`) without an artificial empty second level for hubs that have no remotes yet,
+  - when all supported hubs are already added, Add Hub now shows explicit message:
+    "Нет устройств, которые можно добавить: все поддерживаемые хабы уже добавлены."
+- Remote wizard UX:
+  - brand and device steps now include local search fields while preserving strict filtering chain (`type -> brand -> device`).
+- Hub discovery behavior:
+  - discovery switched from one-time scan to event-driven monitoring (new/update in device registry),
+  - EasyIR now re-requests scan after entry/subentry updates so new TS1201 devices are suggested without reinstall/restart.
+
+## [0.2.4] - 2026-06-12
+
+### Fixed
+
+- EasyIR sidebar wizard: `POST /api/easyir/ui/remotes` now accepts optional `brand` field from step 2 state and no longer fails remote creation due to strict payload validation.
+
+## [0.2.3] - 2026-06-12
+
+### Added
+
+- New **EasyIR sidebar page** (`/easyir`) with:
+  - explicit labeled actions **Добавить хаб** / **Добавить пульт**,
+  - two-level tree rendering **Hub -> Remote**,
+  - remote onboarding wizard in 3 steps with card **grids**:
+    1) type grid,
+    2) brand grid,
+    3) device grid (multi-column, scrollable).
+- New backend UI API endpoints for EasyIR panel:
+  - hub discovery + creation,
+  - area list loading,
+  - remote catalog by type/brand,
+  - remote creation with duplicate-safe unique id generation.
+
+### Changed
+
+- Extracted remote profile catalog grouping logic into shared module `remote_catalog.py` and reused it in config flow + UI API.
+- Sidebar panel registration now includes both:
+  - `EasyIR` main management page,
+  - `EasyIR Signal Log`.
+
 ## [0.2.2] - 2026-06-12
 
 ### Fixed

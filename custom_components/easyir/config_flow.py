@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -37,21 +36,25 @@ from .const import (
 )
 from .endpoint import endpoint_for_ieee, endpoint_for_zha_device
 from .hub_registry import (
+    configured_hub_ieees,
     hub_ref_by_id,
     hub_subentry_data,
     iter_hub_refs,
     remote_subentry_data,
 )
 from .supported_hubs import ieee_from_zha_device, list_onboarding_hub_choices
+from .remote_catalog import (
+    REMOTE_TYPE_CLIMATE,
+    REMOTE_TYPE_OTHER,
+    REMOTE_TYPE_TV,
+    catalog_for_remote_type,
+)
 
 CONF_HUB_PICK = "hub_pick"
 CONF_ZHA_DEVICE = "zha_device"
 MENU_MANUAL = "manual"
 CONF_REMOTE_TYPE = "remote_type"
 CONF_REMOTE_BRAND = "remote_brand"
-REMOTE_TYPE_CLIMATE = "climate"
-REMOTE_TYPE_TV = "tv"
-REMOTE_TYPE_OTHER = "other"
 
 
 def _ieee_from_zha_device(device: dr.DeviceEntry) -> str | None:
@@ -124,98 +127,6 @@ def _manual_hub_schema(*, default_name: str = "") -> vol.Schema:
             vol.Optional(CONF_AREA_ID): selector.AreaSelector(),
         }
     )
-
-
-def _split_brand_model(label: str) -> tuple[str, str]:
-    """Split profile title into brand/model parts for remote wizard."""
-    normalized = str(label).strip()
-    if not normalized:
-        return "Other", "Unknown model"
-    if "—" in normalized:
-        left, right = normalized.split("—", 1)
-        brand = left.strip() or "Other"
-        model = right.strip() or "Unknown model"
-        return brand, model
-    if "-" in normalized:
-        left, right = normalized.split("-", 1)
-        brand = left.strip() or "Other"
-        model = right.strip() or "Unknown model"
-        return brand, model
-    return "Other", normalized
-
-
-def _climate_catalog_from_options(
-    profile_options: list[dict[str, str]],
-) -> dict[str, list[dict[str, str]]]:
-    """Build brand -> model selector options from bundled climate entries."""
-    grouped: dict[str, list[dict[str, str]]] = defaultdict(list)
-    for option in profile_options:
-        value = str(option.get("value", "")).strip()
-        if not (value.startswith("climate/") and value.endswith(".json")):
-            continue
-        label = str(option.get("label", value)).strip()
-        brand, model = _split_brand_model(label)
-        grouped[brand].append(
-            {
-                "value": value,
-                "label": model,
-            }
-        )
-    catalog: dict[str, list[dict[str, str]]] = {}
-    for brand in sorted(grouped, key=lambda item: item.lower()):
-        models = sorted(grouped[brand], key=lambda item: item["label"].lower())
-        catalog[brand] = models
-    return catalog
-
-
-def _non_climate_catalog_from_options(
-    profile_options: list[dict[str, str]],
-) -> dict[str, list[dict[str, str]]]:
-    """Build brand -> model options from non-climate profiles."""
-    grouped: dict[str, list[dict[str, str]]] = defaultdict(list)
-    for option in profile_options:
-        value = str(option.get("value", "")).strip()
-        if value.startswith("climate/") and value.endswith(".json"):
-            continue
-        if not value:
-            continue
-        label = str(option.get("label", value)).strip()
-        brand, model = _split_brand_model(label)
-        grouped[brand].append({"value": value, "label": model})
-    catalog: dict[str, list[dict[str, str]]] = {}
-    for brand in sorted(grouped, key=lambda item: item.lower()):
-        models = sorted(grouped[brand], key=lambda item: item["label"].lower())
-        catalog[brand] = models
-    return catalog
-
-
-def _tv_catalog_from_options(
-    profile_options: list[dict[str, str]],
-) -> dict[str, list[dict[str, str]]]:
-    """Build TV-only catalog using title heuristics on non-climate profiles."""
-    tv_tokens = (
-        " tv",
-        "tv ",
-        "television",
-        "телев",
-        "smart tv",
-    )
-    grouped: dict[str, list[dict[str, str]]] = defaultdict(list)
-    for option in profile_options:
-        value = str(option.get("value", "")).strip()
-        if value.startswith("climate/") and value.endswith(".json"):
-            continue
-        label = str(option.get("label", value)).strip()
-        low = f" {label.lower()} "
-        if not any(token in low for token in tv_tokens):
-            continue
-        brand, model = _split_brand_model(label)
-        grouped[brand].append({"value": value, "label": model})
-    catalog: dict[str, list[dict[str, str]]] = {}
-    for brand in sorted(grouped, key=lambda item: item.lower()):
-        models = sorted(grouped[brand], key=lambda item: item["label"].lower())
-        catalog[brand] = models
-    return catalog
 
 
 def _resolve_hub_from_device(
@@ -436,6 +347,10 @@ class _HubPickMixin:
     _hub_device_name: str | None
     _hub_endpoint_id: int
 
+    def _is_hub_ieee_already_configured(self, ieee: str) -> bool:
+        """Check active hub set only (ignore stale removed subentries)."""
+        return ieee.lower().replace(" ", "") in configured_hub_ieees(self.hass)
+
     async def _async_manual_hub_pick_label(self) -> str:
         from homeassistant.helpers import translation
 
@@ -489,8 +404,8 @@ class _HubPickMixin:
             if resolved is None:
                 return self.async_abort(reason="unknown_ieee")  # type: ignore[attr-defined]
             ieee, default_name, endpoint_id = resolved
-            await self.async_set_unique_id(ieee.lower().replace(" ", ""))  # type: ignore[attr-defined]
-            self._abort_if_unique_id_configured()  # type: ignore[attr-defined]
+            if self._is_hub_ieee_already_configured(ieee):
+                return self.async_abort(reason="already_configured")  # type: ignore[attr-defined]
             hub_name = str(user_input.get(CONF_HUB_NAME, "")).strip() or default_name
             return await self._async_create_hub_subentry(
                 ieee=ieee,
@@ -547,8 +462,8 @@ class IrHubSubentryFlow(_HubPickMixin, ConfigSubentryFlow):
         if self._hub_ieee is not None:
             default_name = self._hub_device_name or f"IR Hub {self._hub_ieee}"
             if user_input is not None:
-                await self.async_set_unique_id(self._hub_ieee.lower().replace(" ", ""))
-                self._abort_if_unique_id_configured()
+                if self._is_hub_ieee_already_configured(self._hub_ieee):
+                    return self.async_abort(reason="already_configured")
                 hub_name = str(user_input.get(CONF_HUB_NAME, "")).strip() or default_name
                 return await self._async_create_hub_subentry(
                     ieee=self._hub_ieee,
@@ -584,8 +499,8 @@ class IrHubSubentryFlow(_HubPickMixin, ConfigSubentryFlow):
                     errors["base"] = "unknown_ieee"
                 else:
                     ieee, default_name, endpoint_id = resolved
-                    await self.async_set_unique_id(ieee.lower().replace(" ", ""))
-                    self._abort_if_unique_id_configured()
+                    if self._is_hub_ieee_already_configured(ieee):
+                        return self.async_abort(reason="already_configured")
                     hub_name = str(user_input.get(CONF_HUB_NAME, "")).strip() or default_name
                     return await self._async_create_hub_subentry(
                         ieee=ieee,
@@ -723,7 +638,7 @@ class IrRemoteSubentryFlow(ConfigSubentryFlow):
         self._selected_hub_id = hub.subentry_id
 
         profile_options = await self._async_profile_options()
-        catalog = self._catalog_for_remote_type(profile_options, self._selected_remote_type)
+        catalog = catalog_for_remote_type(profile_options, self._selected_remote_type)
         if not catalog:
             return self.async_abort(reason="no_profiles_for_type")
 
@@ -769,7 +684,7 @@ class IrRemoteSubentryFlow(ConfigSubentryFlow):
         self._selected_hub_id = hub.subentry_id
 
         profile_options = await self._async_profile_options()
-        catalog = self._catalog_for_remote_type(profile_options, self._selected_remote_type)
+        catalog = catalog_for_remote_type(profile_options, self._selected_remote_type)
         default_profile = profile_options[0]["value"] if profile_options else PROFILE_CUSTOM
         errors: dict[str, str] = {}
         brand_placeholder = ""
@@ -860,19 +775,6 @@ class IrRemoteSubentryFlow(ConfigSubentryFlow):
             },
         )
 
-    def _catalog_for_remote_type(
-        self,
-        profile_options: list[dict[str, str]],
-        remote_type: str | None,
-    ) -> dict[str, list[dict[str, str]]]:
-        if remote_type == REMOTE_TYPE_CLIMATE:
-            return _climate_catalog_from_options(profile_options)
-        if remote_type == REMOTE_TYPE_TV:
-            return _tv_catalog_from_options(profile_options)
-        if remote_type == REMOTE_TYPE_OTHER:
-            return _non_climate_catalog_from_options(profile_options)
-        return {}
-
     async def _async_profile_options(self) -> list[dict[str, str]]:
         if self._profile_options_cache is not None:
             return list(self._profile_options_cache)
@@ -888,8 +790,6 @@ class IrRemoteSubentryFlow(ConfigSubentryFlow):
     ) -> FlowResult:
         slug = Path(profile_path).stem
         unique = self._next_remote_unique_id(hub_id=hub_id, profile_path=profile_path)
-        await self.async_set_unique_id(unique)
-        self._abort_if_unique_id_configured()
         title = remote_name or f"Remote {slug}"
         base_unique = f"{hub_id}_{slug}"
         if unique != base_unique and not remote_name:

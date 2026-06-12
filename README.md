@@ -2,7 +2,7 @@
 
 Author: Badalyan Vyacheslav
 
-**Release 0.2.2** — hub-centric architecture (ZHA TS1201), тестирование приветствуется. См. [CHANGELOG.md](CHANGELOG.md) и [roadmap](docs/roadmap.yaml).
+**Release 0.2.5** — hub-centric architecture (ZHA TS1201) + EasyIR sidebar page with grid wizard. См. [CHANGELOG.md](CHANGELOG.md) и [roadmap](docs/roadmap.yaml).
 
 Custom Home Assistant integration for IR command delivery in Home Assistant with
 backward-compatible services and an expanding protocol/transport core.
@@ -28,18 +28,23 @@ backward-compatible services and an expanding protocol/transport core.
 - добавлены универсальные IR-преобразования и пилотные protocol-aware механизмы;
 - часть целевых возможностей (полный мульти-транспорт, расширенные UI-тулы, масштабирование по протоколам) еще в развитии.
 
-## Quick start (0.2.2)
+## Quick start (0.2.5)
 
 1. In HACS: **Custom repositories** → `https://github.com/slavonnet/EasyIR`, category **Integration**.
-2. Install **EasyIR** `0.2.2`, restart Home Assistant.
+2. Install **EasyIR** `0.2.5`, restart Home Assistant.
 3. **ZHA** must already be configured (TS1201 IR blaster).
 4. **First setup** — `Settings → Devices & Services → Add Integration → EasyIR`:
    - pick a **discovered TS1201 hub** or select ZHA device manually
    - set hub name + room (endpoint подбирается автоматически)
    - finish directly on the EasyIR integration page
-5. **Later** — on the EasyIR integration card, **Add entry** → **Добавить хаб** или **Добавить пульт**.
-   - add remote wizard: **type (step 1/3) → brand (step 2/3) → model/profile (step 3/3)**
-6. Hub entry **Configure** → same menu for hub/remote.
+5. Open sidebar page **EasyIR**:
+   - buttons **Добавить хаб** / **Добавить пульт** have explicit labels;
+   - tree is shown as **Hub -> Remote**;
+   - add remote wizard works in 3 grid steps:
+     - step 1/3: type,
+     - step 2/3: brand,
+     - step 3/3: device/profile (multi-column with scroll).
+6. Hub entry **Configure** on HA integration card remains available as compatibility path.
 7. Entities: `climate.*` (HVAC), `button.*` (off, ionizer, …).
 
 ## Built-in profiles (works out of the box)
