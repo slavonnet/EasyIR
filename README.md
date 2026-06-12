@@ -2,7 +2,7 @@
 
 Author: Badalyan Vyacheslav
 
-** THIS IS in DEV STATE. Watch for Releases **
+**Pre-release 0.1.0** — hub-centric architecture, тестирование приветствуется. См. [CHANGELOG.md](CHANGELOG.md).
 
 Custom Home Assistant integration for IR command delivery in Home Assistant with
 backward-compatible services and an expanding protocol/transport core.
@@ -11,15 +11,14 @@ backward-compatible services and an expanding protocol/transport core.
 
 ## Features
 
-- Creates climate entity in Home Assistant (`climate.easyir_ac`).
-- Converts IR `Raw` timings to TS1201-compatible base64 payload.
-- Sends code using ZHA cluster command (`0xE004`, `IRSend`).
-- Provides two services:
-  - `easyir.send_raw`
-  - `easyir.send_profile_command`
-- Ships **built-in IR profiles** in the integration package; after install you pick a profile from a list (no file hunt for the default demo).
-- Supports defaults from UI: ZHA device → resolved `ieee`, resolved `profile_path`, `endpoint_id`.
-- Includes built-in send rate-limit and profile file caching.
+- **IR hub** (TS1201/ZHA) as primary device; **virtual remotes** with profiles attach to hub(s).
+- Discovered TS1201 hubs offered when EasyIR is installed.
+- **Climate** entity for grouped HVAC control (mode + fan + temperature in one IR frame).
+- **Button** entities: power off and LG extras (ionizer, energy saving, auto clean, …) as separate commands.
+- Converts IR timings to TS1201 base64; sends via ZHA cluster `0xE004`.
+- Services: `send_raw`, `send_profile_command`, `start_learn`, `read_learned_ir`, `capture_inbound_ir`.
+- **356+ bundled climate profiles**; LG P12RK (`7062`) with universal lg28 encoder.
+- On-demand IR learn and inbound capture (no always-on polling loop).
 
 ## Статус проекта
 
@@ -29,25 +28,18 @@ backward-compatible services and an expanding protocol/transport core.
 - добавлены универсальные IR-преобразования и пилотные protocol-aware механизмы;
 - часть целевых возможностей (полный мульти-транспорт, расширенные UI-тулы, масштабирование по протоколам) еще в развитии.
 
-## Quick start (текущий релиз)
+## Quick start (0.1.0)
 
-1. Put this project into a GitHub repository.
-2. Update placeholders in `custom_components/easyir/manifest.json`:
-   - `documentation`
-   - `issue_tracker`
-   - `codeowners`
-3. In Home Assistant HACS:
-   - `Integrations` -> menu (3 dots) -> `Custom repositories`
-   - add your GitHub repository URL
-   - category: `Integration`
-4. Install `EasyIR` (version `0.0.1`).
-5. Restart Home Assistant.
-6. Add integration from UI:
-   - `Settings -> Devices & Services -> Add Integration -> EasyIR`
-   - pick your **ZHA IR device** (IEEE is filled automatically)
-   - pick an **IR profile** from the list (built-in codes ship with EasyIR — start with **Demo AC** to verify wiring)
-   - optional: **Custom path** only if you chose «Custom path» in the profile list
-   - optional `endpoint_id` (often `1`)
+1. In HACS: **Custom repositories** → `https://github.com/slavonnet/EasyIR`, category **Integration**.
+2. Install **EasyIR** `0.1.0`, restart Home Assistant.
+3. **ZHA** must already be configured.
+4. Add integration:
+   - `Settings → Devices & Services → Add Integration → EasyIR`
+   - pick a **discovered TS1201 hub** or select ZHA device manually
+   - confirm hub endpoint (usually `1`)
+   - optionally add first **remote** with profile (**Demo AC** or **LG P12RK / 7062**)
+5. More remotes: hub entry **Configure → Add IR remote**.
+6. Entities: `climate.*` (HVAC), `button.*` (off, ionizer, …).
 
 ## Built-in profiles (works out of the box)
 
