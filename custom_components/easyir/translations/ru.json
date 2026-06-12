@@ -38,13 +38,9 @@
           "add_remote": "Добавить пульт сейчас"
         }
       },
-      "manage": {
+      "main_menu": {
         "title": "EasyIR",
-        "description": "Настроенные IR-хабы:\n{hubs}",
-        "data": {
-          "manage_action": "Действие"
-        },
-        "options": {
+        "menu_options": {
           "add_hub": "Добавить IR-хаб",
           "add_remote": "Добавить пульт"
         }

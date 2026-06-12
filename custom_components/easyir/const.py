@@ -35,6 +35,10 @@ DEFAULT_SEND_DELAY_MS = 700
 DEFAULT_LEARN_DURATION_SEC = 120
 PLATFORMS = ["climate", "button"]
 
+FLOW_SOURCE_ADD_HUB = "add_hub"
+FLOW_SOURCE_ADD_REMOTE = "add_remote"
+FLOW_SOURCE_HUB_REMOTE = "hub_remote"
+
 ZHA_DOMAIN = "zha"
 ZHA_SERVICE = "issue_zigbee_cluster_command"
 

@@ -2,7 +2,7 @@
 
 Author: Badalyan Vyacheslav
 
-**Pre-release 0.1.3** — hub-centric architecture (ZHA TS1201), тестирование приветствуется. См. [CHANGELOG.md](CHANGELOG.md) и [roadmap](docs/roadmap.yaml).
+**Pre-release 0.1.4** — hub-centric architecture (ZHA TS1201), тестирование приветствуется. См. [CHANGELOG.md](CHANGELOG.md) и [roadmap](docs/roadmap.yaml).
 
 Custom Home Assistant integration for IR command delivery in Home Assistant with
 backward-compatible services and an expanding protocol/transport core.
@@ -28,17 +28,17 @@ backward-compatible services and an expanding protocol/transport core.
 - добавлены универсальные IR-преобразования и пилотные protocol-aware механизмы;
 - часть целевых возможностей (полный мульти-транспорт, расширенные UI-тулы, масштабирование по протоколам) еще в развитии.
 
-## Quick start (0.1.3)
+## Quick start (0.1.4)
 
 1. In HACS: **Custom repositories** → `https://github.com/slavonnet/EasyIR`, category **Integration**.
-2. Install **EasyIR** `0.1.3`, restart Home Assistant.
+2. Install **EasyIR** `0.1.4`, restart Home Assistant.
 3. **ZHA** must already be configured (TS1201 IR blaster).
 4. Add integration:
    - `Settings → Devices & Services → Add Integration → EasyIR`
    - pick a **discovered TS1201 hub** or select ZHA device manually
    - confirm hub (endpoint подбирается автоматически)
    - optionally add first **remote** with profile (**Demo AC** or **LG P12RK / 7062**)
-5. If EasyIR is already installed: повторное добавление → **добавить хаб** или **добавить пульт**.
+5. **Add entry** on the EasyIR card → **Добавить IR-хаб** или **Добавить пульт** (две кнопки).
 6. More remotes/hubs: hub entry **Configure → Add IR remote** / **Add IR hub**.
 7. Entities: `climate.*` (HVAC), `button.*` (off, ionizer, …).
 

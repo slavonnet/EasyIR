@@ -386,19 +386,25 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
 
 
 async def _async_offer_remote_setup(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Chain remote config flow after hub onboarding when requested."""
+    """Legacy: chain remote flow after hub setup (prefer same-flow hub_confirm path)."""
     if not entry.data.get("offer_remote_setup"):
         return
     data = dict(entry.data)
     data.pop("offer_remote_setup", None)
     hass.config_entries.async_update_entry(entry, data=data)
-    await hass.config_entries.flow.async_init(
-        DOMAIN,
-        context={
-            "source": "hub_remote",
-            "hub_entry_id": entry.entry_id,
-        },
-    )
+
+    async def _start_remote_flow() -> None:
+        from .const import FLOW_SOURCE_HUB_REMOTE
+
+        await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={
+                "source": FLOW_SOURCE_HUB_REMOTE,
+                "hub_entry_id": entry.entry_id,
+            },
+        )
+
+    hass.async_create_task(_start_remote_flow())
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

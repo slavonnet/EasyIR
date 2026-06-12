@@ -12,8 +12,8 @@ from homeassistant.helpers import selector
 
 from .bundled_profiles import (
     PROFILE_CUSTOM,
+    async_select_selector_options,
     resolve_stored_profile_path,
-    select_selector_options,
 )
 from .const import (
     CONF_ENDPOINT_ID,
@@ -29,7 +29,11 @@ from .const import (
     DOMAIN,
     ENTRY_KIND_HUB,
     ENTRY_KIND_REMOTE,
+    FLOW_SOURCE_ADD_HUB,
+    FLOW_SOURCE_ADD_REMOTE,
+    FLOW_SOURCE_HUB_REMOTE,
     TRANSPORT_TS1201_ZHA,
+    ZHA_DOMAIN,
 )
 from .endpoint import endpoint_for_ieee, endpoint_for_zha_device
 from .hub_registry import hub_entry_by_id, is_hub_entry, iter_hub_entries
@@ -37,11 +41,7 @@ from .supported_hubs import ieee_from_zha_device, list_onboarding_hub_choices
 
 CONF_ZHA_DEVICE = "zha_device"
 CONF_HUB_PICK = "hub_pick"
-CONF_MANAGE_ACTION = "manage_action"
-ZHA_DOMAIN = "zha"
 MENU_MANUAL = "manual"
-ACTION_ADD_HUB = "add_hub"
-ACTION_ADD_REMOTE = "add_remote"
 
 
 def _ieee_from_zha_device(device: dr.DeviceEntry) -> str | None:
@@ -58,6 +58,7 @@ class EasyIrConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._hub_ieee: str | None = None
         self._hub_device_name: str | None = None
         self._prefill_hub_entry_id: str | None = None
+        self._pending_hub_endpoint_id: int | None = None
 
     async def _async_manual_hub_pick_label(self) -> str:
         from homeassistant.helpers import translation
@@ -71,6 +72,20 @@ class EasyIrConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return strings.get(
             f"component.{DOMAIN}.config.step.user.options.manual",
             "Select ZHA device manually",
+        )
+
+    async def _async_menu_label(self, option_key: str) -> str:
+        from homeassistant.helpers import translation
+
+        strings = await translation.async_get_translations(
+            self.hass,
+            self.hass.config.language,
+            "config",
+            integrations=[DOMAIN],
+        )
+        return strings.get(
+            f"component.{DOMAIN}.config.step.main_menu.menu_options.{option_key}",
+            option_key,
         )
 
     async def async_step_import(self, user_input: dict[str, Any]) -> FlowResult:
@@ -92,7 +107,20 @@ class EasyIrConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_integration_discovery(
         self, discovery_info: dict[str, Any]
     ) -> FlowResult:
-        """Handle discovered IR hub (TS1201 via ZHA)."""
+        """Handle discovered IR hub (TS1201 via ZHA) on first EasyIR setup."""
+        return await self._async_begin_hub_from_discovery(discovery_info)
+
+    async def async_step_add_hub(
+        self, discovery_info: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Add another hub (menu or discovered unconfigured TS1201)."""
+        if discovery_info:
+            return await self._async_begin_hub_from_discovery(discovery_info)
+        return await self._async_step_pick_hub(None)
+
+    async def _async_begin_hub_from_discovery(
+        self, discovery_info: dict[str, Any]
+    ) -> FlowResult:
         device_id = str(discovery_info.get("device_id", "")).strip()
         ieee = str(discovery_info.get("ieee", "")).strip() or None
         device_reg = dr.async_get(self.hass)
@@ -112,83 +140,38 @@ class EasyIrConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Hub/remote onboarding or management when EasyIR is added again."""
+        """Default entry: main menu (add hub / add remote)."""
         source = str(self.context.get("source", "")).strip()
-        if source == "hub_remote":
+        if source == FLOW_SOURCE_HUB_REMOTE:
             self._prefill_hub_entry_id = str(
                 self.context.get("hub_entry_id", "")
             ).strip() or None
             return await self.async_step_hub_remote()
-        if source == ACTION_ADD_HUB:
-            return await self._async_step_pick_hub(user_input)
+        if source == FLOW_SOURCE_ADD_HUB:
+            return await self.async_step_add_hub(user_input)
+        return await self.async_step_main_menu()
 
-        if not self.hass.config_entries.async_entries(ZHA_DOMAIN):
-            return self.async_abort(reason="zha_not_configured")
-
-        existing_hubs = iter_hub_entries(self.hass)
-        if user_input is None and existing_hubs and source not in (ACTION_ADD_HUB, "hub_remote"):
-            return await self.async_step_manage()
-
-        return await self._async_step_pick_hub(user_input)
-
-    async def async_step_manage(
+    async def async_step_main_menu(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Add hub or remote when EasyIR is already configured."""
-        existing_hubs = iter_hub_entries(self.hass)
-        if not existing_hubs:
+        """Top-level actions: add IR hub or add virtual remote."""
+        if user_input == FLOW_SOURCE_ADD_HUB:
+            if not self.hass.config_entries.async_entries(ZHA_DOMAIN):
+                return self.async_abort(reason="zha_not_configured")
             return await self._async_step_pick_hub(None)
+        if user_input == FLOW_SOURCE_ADD_REMOTE:
+            if not iter_hub_entries(self.hass):
+                return self.async_abort(reason="hub_not_found")
+            return await self.async_step_hub_remote()
 
-        if user_input is not None:
-            action = str(user_input.get(CONF_MANAGE_ACTION, "")).strip()
-            if action == ACTION_ADD_REMOTE:
-                return await self.async_step_hub_remote()
-            if action == ACTION_ADD_HUB:
-                return await self._async_step_pick_hub(None)
-
-        return await self._async_show_manage_menu(existing_hubs)
-
-    async def _async_manage_action_label(self, action: str) -> str:
-        from homeassistant.helpers import translation
-
-        strings = await translation.async_get_translations(
-            self.hass,
-            self.hass.config.language,
-            "config",
-            integrations=[DOMAIN],
-        )
-        return strings.get(
-            f"component.{DOMAIN}.config.step.manage.options.{action}",
-            action,
-        )
-
-    async def _async_show_manage_menu(
-        self, hubs: list[config_entries.ConfigEntry]
-    ) -> FlowResult:
-        """Add hub / add remote when EasyIR is configured and user adds integration again."""
-        hub_lines = "\n".join(f"- {h.title}" for h in hubs[:6])
-        if len(hubs) > 6:
-            hub_lines += "\n- …"
-        add_hub_label = await self._async_manage_action_label(ACTION_ADD_HUB)
-        add_remote_label = await self._async_manage_action_label(ACTION_ADD_REMOTE)
-        data_schema = vol.Schema(
-            {
-                vol.Required(CONF_MANAGE_ACTION): selector.SelectSelector(
-                    selector.SelectSelectorConfig(
-                        options=[
-                            {"value": ACTION_ADD_HUB, "label": add_hub_label},
-                            {"value": ACTION_ADD_REMOTE, "label": add_remote_label},
-                        ],
-                        mode=selector.SelectSelectorMode.LIST,
-                        custom_value=False,
-                    )
-                ),
-            }
-        )
-        return self.async_show_form(
-            step_id="manage",
-            data_schema=data_schema,
-            description_placeholders={"hubs": hub_lines},
+        add_hub_label = await self._async_menu_label(FLOW_SOURCE_ADD_HUB)
+        add_remote_label = await self._async_menu_label(FLOW_SOURCE_ADD_REMOTE)
+        return self.async_show_menu(
+            step_id="main_menu",
+            menu_options={
+                FLOW_SOURCE_ADD_HUB: add_hub_label,
+                FLOW_SOURCE_ADD_REMOTE: add_remote_label,
+            },
         )
 
     async def _async_step_pick_hub(
@@ -284,7 +267,7 @@ class EasyIrConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_hub_confirm(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Confirm hub endpoint and optionally add first remote."""
+        """Confirm hub and optionally continue to remote profile in the same flow."""
         errors: dict[str, str] = {}
         if self._hub_ieee is None:
             return self.async_abort(reason="unknown_ieee")
@@ -297,11 +280,10 @@ class EasyIrConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             endpoint_id = int(
                 self.context.get("hub_endpoint_id", DEFAULT_ENDPOINT_ID)
             )
-            offer_remote = bool(user_input.get("add_remote"))
-            return self._async_create_hub_entry(
-                endpoint_id=endpoint_id,
-                offer_remote_setup=offer_remote,
-            )
+            if bool(user_input.get("add_remote")):
+                self._pending_hub_endpoint_id = endpoint_id
+                return await self.async_step_hub_remote()
+            return self._async_create_hub_entry(endpoint_id=endpoint_id)
 
         if self.context.get("hub_endpoint_id") is None and self._hub_ieee:
             self.context["hub_endpoint_id"] = endpoint_for_ieee(
@@ -342,19 +324,67 @@ class EasyIrConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return hubs[0]
         return None
 
+    async def _async_ensure_hub_for_remote_flow(
+        self, user_input: dict[str, Any] | None
+    ) -> config_entries.ConfigEntry | None:
+        """Create pending hub config entry when hub+remote are added in one flow."""
+        hub = self._async_resolve_hub_for_remote(user_input)
+        if hub is not None:
+            return hub
+        if self._pending_hub_endpoint_id is None or self._hub_ieee is None:
+            return None
+        hub_entry_id = await self._async_register_hub_config_entry(
+            endpoint_id=self._pending_hub_endpoint_id
+        )
+        self._pending_hub_endpoint_id = None
+        self._prefill_hub_entry_id = hub_entry_id
+        self.context["hub_entry_id"] = hub_entry_id
+        return hub_entry_by_id(self.hass, hub_entry_id)
+
+    async def _async_register_hub_config_entry(self, *, endpoint_id: int) -> str:
+        """Register hub config entry while config flow continues (hub+remote session)."""
+        ieee = self._hub_ieee
+        if ieee is None:
+            raise ValueError("hub ieee missing")
+        unique_id = ieee.lower().replace(" ", "")
+        await self.async_set_unique_id(unique_id)
+        self._abort_if_unique_id_configured()
+
+        title = self._hub_device_name or f"IR Hub {ieee}"
+        data: dict[str, Any] = {
+            CONF_ENTRY_KIND: ENTRY_KIND_HUB,
+            CONF_IEEE: ieee,
+            CONF_ENDPOINT_ID: endpoint_id,
+            CONF_TRANSPORT: TRANSPORT_TS1201_ZHA,
+        }
+        entry = config_entries.ConfigEntry(
+            version=self.VERSION,
+            minor_version=self.MINOR_VERSION,
+            domain=DOMAIN,
+            title=title,
+            data=data,
+            source=config_entries.SOURCE_USER,
+            unique_id=unique_id,
+            discovery_keys=set(),
+        )
+        created = await self.hass.config_entries.async_add(entry)
+        await self.hass.config_entries.async_setup(created.entry_id)
+        return created.entry_id
+
     async def async_step_hub_remote(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Add remote to an existing hub (chained from hub setup or options)."""
+        """Add remote to an existing hub (or pending hub in the same flow)."""
         hubs = iter_hub_entries(self.hass)
-        if not hubs:
+        pending_hub = self._pending_hub_endpoint_id is not None and self._hub_ieee
+        if not hubs and not pending_hub:
             return self.async_abort(reason="hub_not_found")
 
-        hub = self._async_resolve_hub_for_remote(user_input)
+        hub = await self._async_ensure_hub_for_remote_flow(user_input)
         need_hub_pick = hub is None and len(hubs) > 1
 
         errors: dict[str, str] = {}
-        profile_options = select_selector_options()
+        profile_options = await async_select_selector_options(self.hass)
         default_profile = profile_options[0]["value"] if profile_options else PROFILE_CUSTOM
 
         if user_input is not None and CONF_HUB_ENTRY_ID in user_input and hub is not None:
@@ -366,6 +396,7 @@ class EasyIrConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             and not need_hub_pick
             and CONF_PROFILE_CHOICE in user_input
         ):
+            hub = await self._async_ensure_hub_for_remote_flow(user_input)
             if hub is None:
                 return self.async_abort(reason="hub_not_found")
             profile_choice = user_input.get(CONF_PROFILE_CHOICE, default_profile)
@@ -385,7 +416,7 @@ class EasyIrConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
 
         if user_input is not None and CONF_HUB_ENTRY_ID in user_input:
-            hub = self._async_resolve_hub_for_remote(user_input)
+            hub = await self._async_ensure_hub_for_remote_flow(user_input)
             need_hub_pick = False
 
         schema_fields: dict[vol.Marker, Any] = {}
@@ -399,6 +430,8 @@ class EasyIrConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
             )
         else:
+            if hub is None:
+                hub = await self._async_ensure_hub_for_remote_flow(user_input)
             if hub is None:
                 return self.async_abort(reason="hub_not_found")
             schema_fields[vol.Required(CONF_PROFILE_CHOICE, default=default_profile)] = (
@@ -427,7 +460,7 @@ class EasyIrConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def _async_create_hub_entry(
         self, *, endpoint_id: int, offer_remote_setup: bool = False
     ) -> FlowResult:
-        """Create hub config entry."""
+        """Create hub config entry (end of hub-only flow)."""
         ieee = self._hub_ieee
         if ieee is None:
             raise ValueError("hub ieee missing")
@@ -503,18 +536,18 @@ class EasyIrOptionsFlowHandler(config_entries.OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         if user_input is None:
-            add_remote_label = await self._async_option_label("add_remote")
-            add_hub_label = await self._async_option_label("add_hub")
+            add_remote_label = await self._async_option_label(FLOW_SOURCE_ADD_REMOTE)
+            add_hub_label = await self._async_option_label(FLOW_SOURCE_ADD_HUB)
             return self.async_show_menu(
                 step_id="menu",
                 menu_options={
-                    ACTION_ADD_REMOTE: add_remote_label,
-                    ACTION_ADD_HUB: add_hub_label,
+                    FLOW_SOURCE_ADD_REMOTE: add_remote_label,
+                    FLOW_SOURCE_ADD_HUB: add_hub_label,
                 },
             )
-        if user_input == ACTION_ADD_REMOTE:
+        if user_input == FLOW_SOURCE_ADD_REMOTE:
             return await self.async_step_add_remote()
-        if user_input == ACTION_ADD_HUB:
+        if user_input == FLOW_SOURCE_ADD_HUB:
             return await self.async_step_add_hub()
         return self.async_create_entry(title="", data={})
 
@@ -524,7 +557,7 @@ class EasyIrOptionsFlowHandler(config_entries.OptionsFlow):
         await self.hass.config_entries.flow.async_init(
             DOMAIN,
             context={
-                "source": "hub_remote",
+                "source": FLOW_SOURCE_HUB_REMOTE,
                 "hub_entry_id": self._entry.entry_id,
             },
         )
@@ -535,7 +568,7 @@ class EasyIrOptionsFlowHandler(config_entries.OptionsFlow):
     ) -> FlowResult:
         await self.hass.config_entries.flow.async_init(
             DOMAIN,
-            context={"source": ACTION_ADD_HUB},
+            context={"source": FLOW_SOURCE_ADD_HUB},
         )
         return self.async_create_entry(title="", data={})
 

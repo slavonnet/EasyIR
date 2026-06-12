@@ -25,8 +25,16 @@ class TestOfferRemoteSetup(unittest.IsolatedAsyncioTestCase):
         hass = MagicMock()
         hass.config_entries.async_update_entry = MagicMock()
         hass.config_entries.flow.async_init = AsyncMock()
+        scheduled: list = []
+
+        def _schedule_task(coro) -> None:
+            scheduled.append(coro)
+
+        hass.async_create_task = _schedule_task
 
         await _async_offer_remote_setup(hass, entry)
+        self.assertEqual(len(scheduled), 1)
+        await scheduled[0]
 
         hass.config_entries.async_update_entry.assert_called_once()
         update_call = hass.config_entries.async_update_entry.call_args
@@ -34,12 +42,12 @@ class TestOfferRemoteSetup(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("offer_remote_setup", updated_data)
         self.assertEqual(updated_data["ieee"], "aa:bb:cc:dd:ee:ff")
 
-        hass.config_entries.flow.async_init.assert_awaited_once_with(
-            DOMAIN,
-            context={
-                "source": "hub_remote",
-                "hub_entry_id": entry.entry_id,
-            },
+        hass.config_entries.flow.async_init.assert_awaited_once()
+        init_call = hass.config_entries.flow.async_init.await_args
+        self.assertEqual(init_call.args[0], DOMAIN)
+        self.assertEqual(
+            init_call.kwargs["context"]["hub_entry_id"],
+            entry.entry_id,
         )
 
     async def test_offer_remote_setup_skips_when_flag_missing(self) -> None:

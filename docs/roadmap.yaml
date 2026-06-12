@@ -17,12 +17,12 @@ principles:
   - TS1201/ZHA в v0.1.x — пилотный transport, не архитектурный потолок.
 
 current_release:
-  version: "0.1.2"
+  version: "0.1.4"
   scope: >
   - IR-хаб (config entry hub) + виртуальные пульты (remote).
-  - Обнаружение TS1201 через ZHA, авто endpoint.
-  - Climate, button, signal log, on-demand learn/capture.
-  - Не в scope релиза: HA infrared stack, Wi‑Fi/Xiaomi хабы, визард пультов.
+  - Main menu: добавить хаб / добавить пульт; hub+remote в одной сессии flow.
+  - Дерево устройств: хаб → пульт; discovery только для новых хабов.
+  - Не в scope: единый wizard имя/комната (subentries), HA infrared stack, Wi‑Fi/Xiaomi.
 
 technical_requirements:
   compatibility:

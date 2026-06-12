@@ -2,6 +2,24 @@
 
 All notable changes to EasyIR are documented here.
 
+## [0.1.4] - 2026-06-12
+
+### Fixed
+
+- **Add remote** after hub confirm: continues in the same config flow (no lost checkbox).
+- Blocking I/O in `bundled_profiles` during config flow (registry/climate scan) — load via executor + cache; fixes IR send stalls after onboarding.
+- Discovery: unconfigured TS1201 opens **Add IR hub** flow, not «Add EasyIR» again.
+- Device tree: IR hub is top-level; virtual remotes are children under the hub entry.
+
+### Changed
+
+- **Add entry** / repeat onboarding: main menu with two buttons (**Add IR hub** / **Add IR remote**) instead of dropdown manage step.
+- Legacy `offer_remote_setup` chains remote flow after hub setup via deferred task (not during setup).
+
+### Note
+
+- Hub and remote remain separate config entries (HA may still ask name/area twice); unified wizard is on the roadmap (`docs/roadmap.yaml`).
+
 ## [0.1.3] - 2026-06-12
 
 ### Fixed

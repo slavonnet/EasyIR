@@ -8,8 +8,11 @@ from custom_components.easyir.config_flow import EasyIrConfigFlow
 
 
 class TestConfigFlowSteps(unittest.TestCase):
-    def test_manage_step_handler_exists(self) -> None:
-        self.assertTrue(callable(getattr(EasyIrConfigFlow, "async_step_manage", None)))
+    def test_main_menu_step_handler_exists(self) -> None:
+        self.assertTrue(callable(getattr(EasyIrConfigFlow, "async_step_main_menu", None)))
+
+    def test_add_hub_step_handler_exists(self) -> None:
+        self.assertTrue(callable(getattr(EasyIrConfigFlow, "async_step_add_hub", None)))
 
     def test_hub_remote_step_handler_exists(self) -> None:
         self.assertTrue(callable(getattr(EasyIrConfigFlow, "async_step_hub_remote", None)))

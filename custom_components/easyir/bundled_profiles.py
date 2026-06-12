@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from homeassistant.core import HomeAssistant
+
 PROFILE_CUSTOM = "__custom__"
 
 _PACKAGE_DIR = Path(__file__).resolve().parent
@@ -14,10 +16,18 @@ _REGISTRY_FILE = _PROFILES_DIR / "registry.json"
 _CLIMATE_DIR = _PROFILES_DIR / "climate"
 _CLIMATE_INDEX = _PROFILES_DIR / "climate_index.json"
 
+_SELECTOR_OPTIONS_CACHE: list[dict[str, str]] | None = None
+
 
 def profiles_dir() -> Path:
     """Directory containing bundled profile JSON files."""
     return _PROFILES_DIR
+
+
+def clear_selector_options_cache() -> None:
+    """Clear cached profile selector options (tests)."""
+    global _SELECTOR_OPTIONS_CACHE
+    _SELECTOR_OPTIONS_CACHE = None
 
 
 def load_registry() -> list[dict[str, Any]]:
@@ -44,8 +54,8 @@ def _climate_json_sort_key(path: Path) -> tuple[int, str]:
     return (10**9, stem)
 
 
-def select_selector_options() -> list[dict[str, str]]:
-    """Options for UI: manual registry + bulk climate library + custom path."""
+def _build_selector_options() -> list[dict[str, str]]:
+    """Build profile dropdown options (blocking I/O — run in executor)."""
     options: list[dict[str, str]] = []
 
     for item in load_registry():
@@ -74,6 +84,23 @@ def select_selector_options() -> list[dict[str, str]]:
         }
     )
     return options
+
+
+def select_selector_options() -> list[dict[str, str]]:
+    """Return cached profile options (sync; uses cache after first async warm-up)."""
+    global _SELECTOR_OPTIONS_CACHE
+    if _SELECTOR_OPTIONS_CACHE is None:
+        _SELECTOR_OPTIONS_CACHE = _build_selector_options()
+    return list(_SELECTOR_OPTIONS_CACHE)
+
+
+async def async_select_selector_options(hass: HomeAssistant) -> list[dict[str, str]]:
+    """Load profile options without blocking the event loop."""
+    global _SELECTOR_OPTIONS_CACHE
+    if _SELECTOR_OPTIONS_CACHE is not None:
+        return list(_SELECTOR_OPTIONS_CACHE)
+    _SELECTOR_OPTIONS_CACHE = await hass.async_add_executor_job(_build_selector_options)
+    return list(_SELECTOR_OPTIONS_CACHE)
 
 
 def resolve_stored_profile_path(profile_choice: str, custom_path: str | None) -> str:
