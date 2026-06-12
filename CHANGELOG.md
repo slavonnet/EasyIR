@@ -2,6 +2,23 @@
 
 All notable changes to EasyIR are documented here.
 
+## [0.2.5] - 2026-06-12
+
+### Fixed
+
+- Hub/remote re-attach stability:
+  - removed false-positive unique-id blocking in subentry add flows that could prevent re-adding a deleted hub/remote in the same HA session,
+  - added cleanup of stale EasyIR device links in device registry after subentry deletion.
+- EasyIR page tree/UX:
+  - tree rendering is kept strictly two-level (`Hub -> Remote`) without an artificial empty second level for hubs that have no remotes yet,
+  - when all supported hubs are already added, Add Hub now shows explicit message:
+    "Нет устройств, которые можно добавить: все поддерживаемые хабы уже добавлены."
+- Remote wizard UX:
+  - brand and device steps now include local search fields while preserving strict filtering chain (`type -> brand -> device`).
+- Hub discovery behavior:
+  - discovery switched from one-time scan to event-driven monitoring (new/update in device registry),
+  - EasyIR now re-requests scan after entry/subentry updates so new TS1201 devices are suggested without reinstall/restart.
+
 ## [0.2.4] - 2026-06-12
 
 ### Fixed
