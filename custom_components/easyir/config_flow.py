@@ -30,9 +30,11 @@ from .const import (
     CONF_REMOTE_NAME,
     DEFAULT_ENDPOINT_ID,
     DOMAIN,
+    MOCK_HUB_IEEE,
     PARENT_ENTRY_UNIQUE_ID,
     SUBENTRY_TYPE_HUB,
     SUBENTRY_TYPE_REMOTE,
+    TRANSPORT_MOCK,
     ZHA_DOMAIN,
 )
 from .endpoint import endpoint_for_ieee, endpoint_for_zha_device
@@ -42,11 +44,17 @@ from .hub_registry import (
     iter_hub_refs,
     remote_subentry_data,
 )
-from .supported_hubs import ieee_from_zha_device, list_onboarding_hub_choices
+from .supported_hubs import (
+    emulator_hub_choice,
+    ieee_from_zha_device,
+    is_emulator_hub_configured,
+    list_onboarding_hub_choices,
+)
 
 CONF_HUB_PICK = "hub_pick"
 CONF_ZHA_DEVICE = "zha_device"
 MENU_MANUAL = "manual"
+MENU_EMULATOR = "emulator"
 CONF_REMOTE_TYPE = "remote_type"
 CONF_REMOTE_BRAND = "remote_brand"
 REMOTE_TYPE_CLIMATE = "climate"
@@ -78,12 +86,20 @@ def _combined_hub_pick_schema(
     *,
     discovered: list[tuple[str, str]],
     manual_label: str,
+    include_emulator: bool = False,
     default_pick: str | None = None,
     default_name: str = "",
 ) -> vol.Schema:
     """One form: hub + name + room."""
-    select_options = [{"value": dev_id, "label": label} for dev_id, label in discovered]
-    select_options.append({"value": MENU_MANUAL, "label": manual_label})
+    select_options: list[dict[str, str]] = []
+    if include_emulator:
+        emu_id, emu_label = emulator_hub_choice()
+        select_options.append({"value": emu_id, "label": emu_label})
+    select_options.extend(
+        {"value": dev_id, "label": label} for dev_id, label in discovered
+    )
+    if discovered:
+        select_options.append({"value": MENU_MANUAL, "label": manual_label})
     pick_default = default_pick or (discovered[0][0] if len(discovered) == 1 else None)
     fields: dict[vol.Marker, Any] = {
         vol.Required(CONF_HUB_NAME, default=default_name): selector.TextSelector(),
@@ -279,7 +295,11 @@ class EasyIrConfigFlow(ConfigFlow, domain=DOMAIN):
         """First integration setup: hub + name + room in one step."""
         if self.hass.config_entries.async_entries(DOMAIN):
             return self.async_abort(reason="already_configured")
-        if not self.hass.config_entries.async_entries(ZHA_DOMAIN):
+
+        include_emulator = not is_emulator_hub_configured(self.hass)
+        has_zha = bool(self.hass.config_entries.async_entries(ZHA_DOMAIN))
+        discovered = list_onboarding_hub_choices(self.hass)
+        if not has_zha and not discovered and not include_emulator:
             return self.async_abort(reason="zha_not_configured")
 
         if self._hub_ieee is not None:
@@ -302,7 +322,37 @@ class EasyIrConfigFlow(ConfigFlow, domain=DOMAIN):
                 description_placeholders={"hub_name": default_name},
             )
 
-        return await self._async_step_combined_hub(user_input)
+        if not has_zha and not discovered and include_emulator:
+            return await self._async_step_emulator_hub(user_input)
+
+        return await self._async_step_combined_hub(
+            user_input, include_emulator=include_emulator
+        )
+
+    async def _async_step_emulator_hub(
+        self, user_input: dict[str, Any] | None
+    ) -> FlowResult:
+        """Create mock IR hub without ZHA hardware."""
+        default_name = "IR Hub Emulator"
+        if user_input is not None:
+            hub_name = str(user_input.get(CONF_HUB_NAME, "")).strip() or default_name
+            return await self._async_create_parent_with_hub(
+                ieee=MOCK_HUB_IEEE,
+                endpoint_id=DEFAULT_ENDPOINT_ID,
+                hub_name=hub_name,
+                area_id=_area_id_from_input(user_input),
+                transport=TRANSPORT_MOCK,
+            )
+        return self.async_show_form(
+            step_id="emulator_hub",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_HUB_NAME, default=default_name): selector.TextSelector(),
+                    vol.Optional(CONF_AREA_ID): selector.AreaSelector(),
+                }
+            ),
+            description_placeholders={"hub_name": default_name},
+        )
 
     async def async_step_pick_hub(
         self, user_input: dict[str, Any] | None = None
@@ -341,14 +391,31 @@ class EasyIrConfigFlow(ConfigFlow, domain=DOMAIN):
         )
 
     async def _async_step_combined_hub(
-        self, user_input: dict[str, Any] | None
+        self,
+        user_input: dict[str, Any] | None,
+        *,
+        include_emulator: bool = False,
     ) -> FlowResult:
         discovered = list_onboarding_hub_choices(self.hass)
-        if not discovered:
-            return await self.async_step_hub_manual(user_input)
+        has_zha = bool(self.hass.config_entries.async_entries(ZHA_DOMAIN))
+        if not discovered and not include_emulator:
+            if has_zha:
+                return await self.async_step_hub_manual(user_input)
+            return await self._async_step_emulator_hub(user_input)
 
         if user_input is not None:
             pick = str(user_input.get(CONF_HUB_PICK, "")).strip()
+            if pick == MENU_EMULATOR:
+                hub_name = (
+                    str(user_input.get(CONF_HUB_NAME, "")).strip() or "IR Hub Emulator"
+                )
+                return await self._async_create_parent_with_hub(
+                    ieee=MOCK_HUB_IEEE,
+                    endpoint_id=DEFAULT_ENDPOINT_ID,
+                    hub_name=hub_name,
+                    area_id=_area_id_from_input(user_input),
+                    transport=TRANSPORT_MOCK,
+                )
             if pick == MENU_MANUAL:
                 return await self.async_step_hub_manual()
             device_reg = dr.async_get(self.hass)
@@ -375,13 +442,17 @@ class EasyIrConfigFlow(ConfigFlow, domain=DOMAIN):
         if default_pick:
             device = dr.async_get(self.hass).async_get(default_pick)
             default_name = _default_name_for_device(device)
+        emu_default = emulator_hub_choice()[0] if include_emulator else None
+        if default_pick is None and emu_default is not None:
+            default_pick = emu_default
         return self.async_show_form(
             step_id="user",
             data_schema=_combined_hub_pick_schema(
                 discovered=discovered,
                 manual_label=manual_label,
+                include_emulator=include_emulator,
                 default_pick=default_pick,
-                default_name=default_name,
+                default_name=default_name or ("IR Hub Emulator" if include_emulator else ""),
             ),
             description_placeholders={"count": str(len(discovered))},
         )
@@ -393,6 +464,7 @@ class EasyIrConfigFlow(ConfigFlow, domain=DOMAIN):
         endpoint_id: int,
         hub_name: str,
         area_id: str | None,
+        transport: str | None = None,
     ) -> FlowResult:
         ieee_norm = ieee.lower().replace(" ", "")
         await self.async_set_unique_id(PARENT_ENTRY_UNIQUE_ID)
@@ -408,6 +480,7 @@ class EasyIrConfigFlow(ConfigFlow, domain=DOMAIN):
                         ieee=ieee,
                         endpoint_id=endpoint_id,
                         area_id=area_id,
+                        transport=transport,
                     ),
                 }
             ],
@@ -436,6 +509,13 @@ class _HubPickMixin:
     _hub_device_name: str | None
     _hub_endpoint_id: int
 
+    def _subentry_unique_id_taken(self, subentry_type: str, unique_id: str) -> bool:
+        parent = self._get_entry()  # type: ignore[attr-defined]
+        for sub in parent.subentries.values():
+            if sub.subentry_type == subentry_type and sub.unique_id == unique_id:
+                return True
+        return False
+
     async def _async_manual_hub_pick_label(self) -> str:
         from homeassistant.helpers import translation
 
@@ -457,28 +537,48 @@ class _HubPickMixin:
         endpoint_id: int,
         hub_name: str,
         area_id: str | None,
+        transport: str | None = None,
     ) -> FlowResult:
+        unique_id = ieee.lower().replace(" ", "")
+        if self._subentry_unique_id_taken(SUBENTRY_TYPE_HUB, unique_id):
+            return self.async_abort(reason="already_configured")  # type: ignore[attr-defined]
         return self.async_create_entry(  # type: ignore[attr-defined]
             title=hub_name,
             data=hub_subentry_data(
                 ieee=ieee,
                 endpoint_id=endpoint_id,
                 area_id=area_id,
+                transport=transport,
             ),
-            unique_id=ieee.lower().replace(" ", ""),
+            unique_id=unique_id,
         )
 
     async def _async_step_combined_hub_subentry(
-        self, user_input: dict[str, Any] | None
+        self,
+        user_input: dict[str, Any] | None,
+        *,
+        include_emulator: bool = False,
     ) -> FlowResult:
         discovered = list_onboarding_hub_choices(self.hass)
-        if not discovered:
+        has_zha = bool(self.hass.config_entries.async_entries(ZHA_DOMAIN))
+        if not discovered and not include_emulator:
             return self.async_abort(  # type: ignore[attr-defined]
                 reason="all_supported_hubs_added"
             )
 
         if user_input is not None:
             pick = str(user_input.get(CONF_HUB_PICK, "")).strip()
+            if pick == MENU_EMULATOR:
+                hub_name = (
+                    str(user_input.get(CONF_HUB_NAME, "")).strip() or "IR Hub Emulator"
+                )
+                return await self._async_create_hub_subentry(
+                    ieee=MOCK_HUB_IEEE,
+                    endpoint_id=DEFAULT_ENDPOINT_ID,
+                    hub_name=hub_name,
+                    area_id=_area_id_from_input(user_input),
+                    transport=TRANSPORT_MOCK,
+                )
             if pick == MENU_MANUAL:
                 return await self.async_step_hub_manual()  # type: ignore[attr-defined]
             device_reg = dr.async_get(self.hass)
@@ -489,8 +589,6 @@ class _HubPickMixin:
             if resolved is None:
                 return self.async_abort(reason="unknown_ieee")  # type: ignore[attr-defined]
             ieee, default_name, endpoint_id = resolved
-            await self.async_set_unique_id(ieee.lower().replace(" ", ""))  # type: ignore[attr-defined]
-            self._abort_if_unique_id_configured()  # type: ignore[attr-defined]
             hub_name = str(user_input.get(CONF_HUB_NAME, "")).strip() or default_name
             return await self._async_create_hub_subentry(
                 ieee=ieee,
@@ -505,13 +603,17 @@ class _HubPickMixin:
         if default_pick:
             device = dr.async_get(self.hass).async_get(default_pick)
             default_name = _default_name_for_device(device)
+        emu_default = emulator_hub_choice()[0] if include_emulator else None
+        if default_pick is None and emu_default is not None:
+            default_pick = emu_default
         return self.async_show_form(  # type: ignore[attr-defined]
             step_id="user",
             data_schema=_combined_hub_pick_schema(
                 discovered=discovered,
                 manual_label=manual_label,
+                include_emulator=include_emulator,
                 default_pick=default_pick,
-                default_name=default_name,
+                default_name=default_name or ("IR Hub Emulator" if include_emulator else ""),
             ),
             description_placeholders={"count": str(len(discovered))},
         )
@@ -528,7 +630,10 @@ class IrHubSubentryFlow(_HubPickMixin, ConfigSubentryFlow):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        if not self.hass.config_entries.async_entries(ZHA_DOMAIN):
+        include_emulator = not is_emulator_hub_configured(self.hass)
+        has_zha = bool(self.hass.config_entries.async_entries(ZHA_DOMAIN))
+        discovered = list_onboarding_hub_choices(self.hass)
+        if not has_zha and not discovered and not include_emulator:
             return self.async_abort(reason="zha_not_configured")
 
         init = self.context.get("discovery_info") or {}
@@ -547,8 +652,6 @@ class IrHubSubentryFlow(_HubPickMixin, ConfigSubentryFlow):
         if self._hub_ieee is not None:
             default_name = self._hub_device_name or f"IR Hub {self._hub_ieee}"
             if user_input is not None:
-                await self.async_set_unique_id(self._hub_ieee.lower().replace(" ", ""))
-                self._abort_if_unique_id_configured()
                 hub_name = str(user_input.get(CONF_HUB_NAME, "")).strip() or default_name
                 return await self._async_create_hub_subentry(
                     ieee=self._hub_ieee,
@@ -567,7 +670,36 @@ class IrHubSubentryFlow(_HubPickMixin, ConfigSubentryFlow):
                 description_placeholders={"hub_name": default_name},
             )
 
-        return await self._async_step_combined_hub_subentry(user_input)
+        if not has_zha and not discovered and include_emulator:
+            return await self._async_step_emulator_hub_subentry(user_input)
+
+        return await self._async_step_combined_hub_subentry(
+            user_input, include_emulator=include_emulator
+        )
+
+    async def _async_step_emulator_hub_subentry(
+        self, user_input: dict[str, Any] | None
+    ) -> FlowResult:
+        default_name = "IR Hub Emulator"
+        if user_input is not None:
+            hub_name = str(user_input.get(CONF_HUB_NAME, "")).strip() or default_name
+            return await self._async_create_hub_subentry(
+                ieee=MOCK_HUB_IEEE,
+                endpoint_id=DEFAULT_ENDPOINT_ID,
+                hub_name=hub_name,
+                area_id=_area_id_from_input(user_input),
+                transport=TRANSPORT_MOCK,
+            )
+        return self.async_show_form(
+            step_id="emulator_hub",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_HUB_NAME, default=default_name): selector.TextSelector(),
+                    vol.Optional(CONF_AREA_ID): selector.AreaSelector(),
+                }
+            ),
+            description_placeholders={"hub_name": default_name},
+        )
 
     async def async_step_hub_manual(
         self, user_input: dict[str, Any] | None = None
@@ -584,8 +716,6 @@ class IrHubSubentryFlow(_HubPickMixin, ConfigSubentryFlow):
                     errors["base"] = "unknown_ieee"
                 else:
                     ieee, default_name, endpoint_id = resolved
-                    await self.async_set_unique_id(ieee.lower().replace(" ", ""))
-                    self._abort_if_unique_id_configured()
                     hub_name = str(user_input.get(CONF_HUB_NAME, "")).strip() or default_name
                     return await self._async_create_hub_subentry(
                         ieee=ieee,
@@ -888,8 +1018,6 @@ class IrRemoteSubentryFlow(ConfigSubentryFlow):
     ) -> FlowResult:
         slug = Path(profile_path).stem
         unique = self._next_remote_unique_id(hub_id=hub_id, profile_path=profile_path)
-        await self.async_set_unique_id(unique)
-        self._abort_if_unique_id_configured()
         title = remote_name or f"Remote {slug}"
         base_unique = f"{hub_id}_{slug}"
         if unique != base_unique and not remote_name:

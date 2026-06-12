@@ -5,7 +5,7 @@ from __future__ import annotations
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 
-from .const import ZHA_DOMAIN
+from .const import MOCK_HUB_IEEE, ZHA_DOMAIN
 from .hub_registry import configured_hub_ieees
 
 
@@ -40,6 +40,17 @@ def iter_zha_ts1201_devices(hass: HomeAssistant) -> list[dr.DeviceEntry]:
             out.append(dev)
     out.sort(key=lambda d: (d.name or "", d.id))
     return out
+
+
+def is_emulator_hub_configured(hass: HomeAssistant) -> bool:
+    """Return True when the mock/emulator hub is already added."""
+    norm = MOCK_HUB_IEEE.lower().replace(" ", "")
+    return norm in configured_hub_ieees(hass)
+
+
+def emulator_hub_choice() -> tuple[str, str]:
+    """Return (pick_id, label) for the mock IR hub onboarding option."""
+    return ("emulator", "IR Hub Emulator (dev/test)")
 
 
 def list_onboarding_hub_choices(hass: HomeAssistant) -> list[tuple[str, str]]:

@@ -60,8 +60,8 @@ from .signal_log.ha_bridge import (
     log_outbound_send,
 )
 from .signal_log.panel import async_register_signal_log_panel
-from .transports import Ts1201ZhaTransport
-from .transports.base import IrTransport, TransportSendContext
+from .transports import transport_for_hub
+from .transports.base import TransportSendContext
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -163,7 +163,7 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     root = hass.data.setdefault(DOMAIN, {})
     root.setdefault("climate_entities", {})
     root.setdefault("remote_buttons", {})
-    root.setdefault("ir_transport", Ts1201ZhaTransport())
+    root.setdefault("transports", {})
     root.setdefault("service_call_pool_interval_s", DEFAULT_POOL_INTERVAL_S)
     get_service_call_pool(hass)
     async_setup_inbound_listener(hass)
@@ -177,7 +177,7 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
         endpoint_id = int(call.data.get(CONF_ENDPOINT_ID) or hub.get(CONF_ENDPOINT_ID) or TS1201_ENDPOINT_ID)
         raw_timings = call.data["raw_timings"]
         frame, code = encode_raw_timings_for_zha_ts1201(raw_timings)
-        transport: IrTransport = hass.data[DOMAIN]["ir_transport"]
+        transport = transport_for_hub(hass, hub)
         await transport.send(
             hass,
             code,
@@ -208,7 +208,7 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
             fan_mode=call.data.get("fan_mode"),
             temperature=call.data.get("temperature"),
         )
-        transport: IrTransport = hass.data[DOMAIN]["ir_transport"]
+        transport = transport_for_hub(hass, hub)
         await transport.send(
             hass,
             code,
@@ -335,7 +335,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN].setdefault("climate_entities", {})
     hass.data[DOMAIN].setdefault("remote_buttons", {})
-    hass.data[DOMAIN].setdefault("ir_transport", Ts1201ZhaTransport())
+    hass.data[DOMAIN].setdefault("transports", {})
     hass.data[DOMAIN][entry.entry_id] = entry
     entry.async_on_unload(entry.add_update_listener(_async_entry_update_listener))
 

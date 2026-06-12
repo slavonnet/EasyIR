@@ -10,7 +10,14 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 
 from .const import CONF_AREA_ID, CONF_IEEE, DOMAIN
-from .hub_registry import HubRef, RemoteRef, iter_hub_refs, iter_remote_refs, remote_display_name
+from .hub_registry import (
+    HubRef,
+    RemoteRef,
+    is_mock_hub,
+    iter_hub_refs,
+    iter_remote_refs,
+    remote_display_name,
+)
 
 HUB_DEVICE_PREFIX = "hub_"
 REMOTE_DEVICE_PREFIX = "remote_"
@@ -69,7 +76,7 @@ async def async_setup_hub_device(
                 "connections": connections,
                 "name": hub.title or f"IR Hub {ieee}",
                 "manufacturer": "EasyIR",
-                "model": "IR Hub",
+                "model": "Mock IR Hub" if is_mock_hub(hub) else "IR Hub",
             },
         )
     )

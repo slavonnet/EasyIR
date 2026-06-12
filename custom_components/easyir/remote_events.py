@@ -21,7 +21,8 @@ from .const import (
 from .hub_registry import RemoteRef, hub_refs_for_remote, hub_transport_data
 from .ir_core.service_adapter import encode_profile_command_for_zha_ts1201
 from .signal_log.ha_bridge import log_outbound_send
-from .transports.base import IrTransport, TransportSendContext
+from .transports import transport_for_hub
+from .transports.base import TransportSendContext
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -47,11 +48,11 @@ async def async_send_profile_to_hubs(
         temperature=temperature,
     )
     frame, code = await hass.async_add_executor_job(encode_call)
-    transport: IrTransport = hass.data[DOMAIN]["ir_transport"]
     for hub in hub_refs_for_remote(hass, remote):
         hub_data = hub_transport_data(hub)
         ieee = hub_data["ieee"]
         endpoint_id = int(hub_data.get(CONF_ENDPOINT_ID, 1))
+        transport = transport_for_hub(hass, hub_data)
         await transport.send(
             hass,
             code,
