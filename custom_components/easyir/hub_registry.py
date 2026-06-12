@@ -23,8 +23,10 @@ from .const import (
     DOMAIN,
     ENTRY_KIND_HUB,
     ENTRY_KIND_REMOTE,
+    MOCK_HUB_IEEE,
     SUBENTRY_TYPE_HUB,
     SUBENTRY_TYPE_REMOTE,
+    TRANSPORT_MOCK,
     TRANSPORT_TS1201_ZHA,
 )
 
@@ -342,16 +344,30 @@ def configured_hub_ieees(hass: HomeAssistant) -> set[str]:
     return out
 
 
+def is_mock_hub(hub: HubRef | Mapping[str, Any]) -> bool:
+    """Return True when hub uses the mock/emulator transport."""
+    data = hub.data if isinstance(hub, HubRef) else hub
+    return str(data.get(CONF_TRANSPORT, TRANSPORT_TS1201_ZHA)) == TRANSPORT_MOCK
+
+
 def hub_subentry_data(
     *,
     ieee: str,
     endpoint_id: int,
     area_id: str | None = None,
+    transport: str | None = None,
 ) -> dict[str, Any]:
+    resolved_transport = transport
+    if resolved_transport is None:
+        resolved_transport = (
+            TRANSPORT_MOCK
+            if _normalize_ieee(ieee) == _normalize_ieee(MOCK_HUB_IEEE)
+            else TRANSPORT_TS1201_ZHA
+        )
     data: dict[str, Any] = {
         CONF_IEEE: ieee,
         CONF_ENDPOINT_ID: endpoint_id,
-        CONF_TRANSPORT: TRANSPORT_TS1201_ZHA,
+        CONF_TRANSPORT: resolved_transport,
     }
     if area_id:
         data[CONF_AREA_ID] = area_id

@@ -10,7 +10,12 @@ from unittest.mock import MagicMock, patch
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from custom_components.easyir.supported_hubs import list_onboarding_hub_choices  # noqa: E402
+from custom_components.easyir.const import MOCK_HUB_IEEE  # noqa: E402
+from custom_components.easyir.supported_hubs import (  # noqa: E402
+    emulator_hub_choice,
+    is_emulator_hub_configured,
+    list_onboarding_hub_choices,
+)
 
 
 class TestOnboardingHubChoices(unittest.TestCase):
@@ -74,3 +79,16 @@ class TestOnboardingHubChoices(unittest.TestCase):
             choices = list_onboarding_hub_choices(hass)
 
         self.assertEqual(choices, [])
+
+    def test_emulator_hub_choice_label(self) -> None:
+        pick_id, label = emulator_hub_choice()
+        self.assertEqual(pick_id, "emulator")
+        self.assertIn("Emulator", label)
+
+    def test_is_emulator_hub_configured_detects_mock_ieee(self) -> None:
+        hass = MagicMock()
+        with patch(
+            "custom_components.easyir.supported_hubs.configured_hub_ieees",
+            return_value={MOCK_HUB_IEEE.lower().replace(" ", "")},
+        ):
+            self.assertTrue(is_emulator_hub_configured(hass))

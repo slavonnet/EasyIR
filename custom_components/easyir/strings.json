@@ -45,6 +45,14 @@
           "area_id": "Room"
         }
       },
+      "emulator_hub": {
+        "title": "IR Hub Emulator",
+        "description": "Add a mock IR hub for development and testing. IR commands are logged, not sent over Zigbee.",
+        "data": {
+          "hub_name": "Hub name",
+          "area_id": "Room"
+        }
+      },
       "hub_remote": {
         "title": "Add IR Remote",
         "description": "Attach a virtual remote profile to hub {hub_title}.",
