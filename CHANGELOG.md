@@ -2,6 +2,24 @@
 
 All notable changes to EasyIR are documented here.
 
+## [0.2.6] - 2026-06-12
+
+### Added
+
+- Dev-mode IR hub emulator without ZHA hardware:
+  - new onboarding option **IR Hub Emulator (dev/test)**,
+  - mock transport that logs outbound sends and emits `easyir_mock_hub_sent`.
+- Transport registry by hub transport type (`ts1201_zha` / `mock`).
+
+### Fixed
+
+- Merged all active implementation branches into `dev` and released from `dev` head.
+- Subentry creation flow compatibility for environments without native HA subentries support.
+
+### Changed
+
+- `AGENTS.md` updated with environment and browser UX testing setup notes.
+
 ## [0.2.5] - 2026-06-12
 
 ### Fixed
