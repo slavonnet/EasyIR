@@ -2,6 +2,14 @@
 
 All notable changes to EasyIR are documented here.
 
+## [0.2.2] - 2026-06-12
+
+### Fixed
+
+- Remote wizard step 1 now uses device-type choices (climate/TV/other) instead of the previous advanced-selector wording.
+- Remote creation on step 3 no longer silently aborts when the same profile is chosen repeatedly for one hub; duplicate profiles now get a deterministic unique suffix and are created correctly.
+- Brand/model catalogs are now type-aware (climate vs TV vs non-climate profile set), with explicit abort message when selected type has no available profiles.
+
 ## [0.2.1] - 2026-06-12
 
 ### Changed
