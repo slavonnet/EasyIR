@@ -2,6 +2,13 @@
 
 All notable changes to EasyIR are documented here.
 
+## [0.2.1-beta2] - 2026-06-12
+
+### Changed
+
+- Merged open PRs into `dev` and published consolidated beta release from `dev` head.
+- Included environment setup notes update in `AGENTS.md` from the second open PR.
+
 ## [0.2.1-beta1] - 2026-06-12
 
 ### Fixed
