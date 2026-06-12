@@ -128,7 +128,8 @@
       },
       "abort": {
         "hub_not_found": "Add an IR hub before adding a remote.",
-        "no_climate_profiles": "No bundled climate profiles available."
+        "no_climate_profiles": "No bundled climate profiles available.",
+        "no_profiles_for_type": "No profiles available for selected remote type."
       },
       "error": {
         "invalid_profile": "Pick a built-in profile or enter a valid custom file path.",
