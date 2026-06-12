@@ -50,7 +50,8 @@ MENU_MANUAL = "manual"
 CONF_REMOTE_TYPE = "remote_type"
 CONF_REMOTE_BRAND = "remote_brand"
 REMOTE_TYPE_CLIMATE = "climate"
-REMOTE_TYPE_ADVANCED = "advanced"
+REMOTE_TYPE_TV = "tv"
+REMOTE_TYPE_OTHER = "other"
 
 
 def _ieee_from_zha_device(device: dr.DeviceEntry) -> str | None:
@@ -160,6 +161,56 @@ def _climate_catalog_from_options(
                 "label": model,
             }
         )
+    catalog: dict[str, list[dict[str, str]]] = {}
+    for brand in sorted(grouped, key=lambda item: item.lower()):
+        models = sorted(grouped[brand], key=lambda item: item["label"].lower())
+        catalog[brand] = models
+    return catalog
+
+
+def _non_climate_catalog_from_options(
+    profile_options: list[dict[str, str]],
+) -> dict[str, list[dict[str, str]]]:
+    """Build brand -> model options from non-climate profiles."""
+    grouped: dict[str, list[dict[str, str]]] = defaultdict(list)
+    for option in profile_options:
+        value = str(option.get("value", "")).strip()
+        if value.startswith("climate/") and value.endswith(".json"):
+            continue
+        if not value:
+            continue
+        label = str(option.get("label", value)).strip()
+        brand, model = _split_brand_model(label)
+        grouped[brand].append({"value": value, "label": model})
+    catalog: dict[str, list[dict[str, str]]] = {}
+    for brand in sorted(grouped, key=lambda item: item.lower()):
+        models = sorted(grouped[brand], key=lambda item: item["label"].lower())
+        catalog[brand] = models
+    return catalog
+
+
+def _tv_catalog_from_options(
+    profile_options: list[dict[str, str]],
+) -> dict[str, list[dict[str, str]]]:
+    """Build TV-only catalog using title heuristics on non-climate profiles."""
+    tv_tokens = (
+        " tv",
+        "tv ",
+        "television",
+        "телев",
+        "smart tv",
+    )
+    grouped: dict[str, list[dict[str, str]]] = defaultdict(list)
+    for option in profile_options:
+        value = str(option.get("value", "")).strip()
+        if value.startswith("climate/") and value.endswith(".json"):
+            continue
+        label = str(option.get("label", value)).strip()
+        low = f" {label.lower()} "
+        if not any(token in low for token in tv_tokens):
+            continue
+        brand, model = _split_brand_model(label)
+        grouped[brand].append({"value": value, "label": model})
     catalog: dict[str, list[dict[str, str]]] = {}
     for brand in sorted(grouped, key=lambda item: item.lower()):
         models = sorted(grouped[brand], key=lambda item: item["label"].lower())
@@ -622,21 +673,14 @@ class IrRemoteSubentryFlow(ConfigSubentryFlow):
         self._selected_hub_id = hub_id
 
         profile_options = await self._async_profile_options()
-        catalog = _climate_catalog_from_options(profile_options)
-        selector_options: list[dict[str, str]] = []
-        if catalog:
-            selector_options.append(
-                {"value": REMOTE_TYPE_CLIMATE, "label": "Кондиционер / климат"}
-            )
-        selector_options.append(
-            {
-                "value": REMOTE_TYPE_ADVANCED,
-                "label": "Продвинутый выбор профиля",
-            }
-        )
+        selector_options: list[dict[str, str]] = [
+            {"value": REMOTE_TYPE_CLIMATE, "label": "Кондиционер / климат"},
+            {"value": REMOTE_TYPE_TV, "label": "ТВ"},
+            {"value": REMOTE_TYPE_OTHER, "label": "Другое / ручной профиль"},
+        ]
         default_type = (
             self._selected_remote_type
-            or (REMOTE_TYPE_CLIMATE if catalog else REMOTE_TYPE_ADVANCED)
+            or REMOTE_TYPE_CLIMATE
         )
         available_values = {item["value"] for item in selector_options}
         if default_type not in available_values:
@@ -649,7 +693,7 @@ class IrRemoteSubentryFlow(ConfigSubentryFlow):
             else:
                 self._selected_remote_type = remote_type
                 self._selected_brand = None
-                if remote_type == REMOTE_TYPE_CLIMATE:
+                if remote_type in (REMOTE_TYPE_CLIMATE, REMOTE_TYPE_TV):
                     return await self.async_step_remote_brand()
                 return await self.async_step_hub_remote()
 
@@ -679,9 +723,9 @@ class IrRemoteSubentryFlow(ConfigSubentryFlow):
         self._selected_hub_id = hub.subentry_id
 
         profile_options = await self._async_profile_options()
-        catalog = _climate_catalog_from_options(profile_options)
+        catalog = self._catalog_for_remote_type(profile_options, self._selected_remote_type)
         if not catalog:
-            return self.async_abort(reason="no_climate_profiles")
+            return self.async_abort(reason="no_profiles_for_type")
 
         brands = sorted(catalog.keys(), key=lambda item: item.lower())
         default_brand = self._selected_brand or brands[0]
@@ -725,15 +769,17 @@ class IrRemoteSubentryFlow(ConfigSubentryFlow):
         self._selected_hub_id = hub.subentry_id
 
         profile_options = await self._async_profile_options()
-        catalog = _climate_catalog_from_options(profile_options)
+        catalog = self._catalog_for_remote_type(profile_options, self._selected_remote_type)
         default_profile = profile_options[0]["value"] if profile_options else PROFILE_CUSTOM
         errors: dict[str, str] = {}
         brand_placeholder = ""
 
-        if self._selected_remote_type == REMOTE_TYPE_CLIMATE:
+        if self._selected_remote_type in (REMOTE_TYPE_CLIMATE, REMOTE_TYPE_TV):
             if not catalog:
-                return self.async_abort(reason="no_climate_profiles")
+                return self.async_abort(reason="no_profiles_for_type")
             brand = self._selected_brand or next(iter(catalog))
+            if brand not in catalog:
+                brand = next(iter(catalog))
             models = catalog.get(brand)
             if not models:
                 return self.async_abort(reason="invalid_profile")
@@ -814,6 +860,19 @@ class IrRemoteSubentryFlow(ConfigSubentryFlow):
             },
         )
 
+    def _catalog_for_remote_type(
+        self,
+        profile_options: list[dict[str, str]],
+        remote_type: str | None,
+    ) -> dict[str, list[dict[str, str]]]:
+        if remote_type == REMOTE_TYPE_CLIMATE:
+            return _climate_catalog_from_options(profile_options)
+        if remote_type == REMOTE_TYPE_TV:
+            return _tv_catalog_from_options(profile_options)
+        if remote_type == REMOTE_TYPE_OTHER:
+            return _non_climate_catalog_from_options(profile_options)
+        return {}
+
     async def _async_profile_options(self) -> list[dict[str, str]]:
         if self._profile_options_cache is not None:
             return list(self._profile_options_cache)
@@ -828,11 +887,15 @@ class IrRemoteSubentryFlow(ConfigSubentryFlow):
         remote_name: str | None,
     ) -> FlowResult:
         slug = Path(profile_path).stem
-        unique = f"{hub_id}_{slug}"
+        unique = self._next_remote_unique_id(hub_id=hub_id, profile_path=profile_path)
         await self.async_set_unique_id(unique)
         self._abort_if_unique_id_configured()
+        title = remote_name or f"Remote {slug}"
+        base_unique = f"{hub_id}_{slug}"
+        if unique != base_unique and not remote_name:
+            title = f"Remote {slug} ({unique.rsplit('_', 1)[-1]})"
         return self.async_create_entry(
-            title=remote_name or f"Remote {slug}",
+            title=title,
             data=remote_subentry_data(
                 hub_subentry_id=hub_id,
                 profile_path=profile_path,
@@ -840,3 +903,20 @@ class IrRemoteSubentryFlow(ConfigSubentryFlow):
             ),
             unique_id=unique,
         )
+
+    def _next_remote_unique_id(self, *, hub_id: str, profile_path: str) -> str:
+        """Return a stable unique id, adding a suffix when profile repeats."""
+        slug = Path(profile_path).stem
+        base = f"{hub_id}_{slug}"
+        parent = self._get_entry()
+        existing = {
+            str(sub.unique_id)
+            for sub in parent.subentries.values()
+            if sub.subentry_type == SUBENTRY_TYPE_REMOTE and sub.unique_id
+        }
+        if base not in existing:
+            return base
+        index = 2
+        while f"{base}_{index}" in existing:
+            index += 1
+        return f"{base}_{index}"

@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import unittest
+from types import MappingProxyType, SimpleNamespace
 
 from custom_components.easyir.config_flow import (
     _climate_catalog_from_options,
+    _non_climate_catalog_from_options,
+    _tv_catalog_from_options,
     EasyIrConfigFlow,
     IrHubSubentryFlow,
     IrRemoteSubentryFlow,
 )
+from custom_components.easyir.const import SUBENTRY_TYPE_REMOTE
 
 
 class TestConfigFlowSteps(unittest.TestCase):
@@ -53,6 +57,46 @@ class TestConfigFlowSteps(unittest.TestCase):
         self.assertEqual(catalog["LG"][0]["label"], "P12RK")
         self.assertIn("Midea", catalog)
         self.assertNotIn("Demo AC", catalog)
+
+    def test_tv_catalog_filters_non_climate_by_name(self) -> None:
+        options = [
+            {"value": "climate/7062.json", "label": "LG — P12RK"},
+            {"value": "tv/samsung_q80.json", "label": "Samsung TV — Q80"},
+            {"value": "demo_ac", "label": "Demo AC"},
+        ]
+        catalog = _tv_catalog_from_options(options)
+        self.assertIn("Samsung TV", catalog)
+        self.assertEqual(catalog["Samsung TV"][0]["value"], "tv/samsung_q80.json")
+        self.assertNotIn("LG", catalog)
+
+    def test_non_climate_catalog_omits_climate_profiles(self) -> None:
+        options = [
+            {"value": "climate/7062.json", "label": "LG — P12RK"},
+            {"value": "demo_ac", "label": "Demo AC"},
+        ]
+        catalog = _non_climate_catalog_from_options(options)
+        self.assertNotIn("LG", catalog)
+        self.assertIn("Other", catalog)
+
+    def test_next_remote_unique_id_adds_suffix_when_duplicate_exists(self) -> None:
+        flow = IrRemoteSubentryFlow()
+        parent = SimpleNamespace(
+            subentries=MappingProxyType(
+                {
+                    "r1": SimpleNamespace(
+                        subentry_type=SUBENTRY_TYPE_REMOTE, unique_id="hub1_7062"
+                    ),
+                    "r2": SimpleNamespace(
+                        subentry_type=SUBENTRY_TYPE_REMOTE, unique_id="hub1_7062_2"
+                    ),
+                }
+            )
+        )
+        flow._get_entry = lambda: parent  # type: ignore[method-assign]
+        unique = flow._next_remote_unique_id(  # type: ignore[attr-defined]
+            hub_id="hub1", profile_path="/tmp/7062.json"
+        )
+        self.assertEqual(unique, "hub1_7062_3")
 
 
 if __name__ == "__main__":
