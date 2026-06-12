@@ -27,8 +27,15 @@ class _FakeHass:
 
 
 class _FakeEntry:
-    def __init__(self, ieee: str) -> None:
-        self.data = {"ieee": ieee}
+    def __init__(self, ieee: str, entry_id: str = "hub-1") -> None:
+        self.entry_id = entry_id
+        self.title = f"Hub {ieee}"
+        self.data = {
+            "entry_kind": "hub",
+            "ieee": ieee,
+            "endpoint_id": 1,
+            "transport": "ts1201_zha",
+        }
 
 
 class TestSignalLogInboundBridge(unittest.TestCase):

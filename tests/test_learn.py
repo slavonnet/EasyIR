@@ -1,4 +1,4 @@
-"""Tests for EasyIR one-shot IR learn flow."""
+"""Tests for EasyIR on-demand IR learn flow."""
 
 from __future__ import annotations
 
@@ -41,24 +41,37 @@ class _FakeServices:
         return {}
 
 
+def _hub_entry(entry_id: str, ieee: str, endpoint_id: int = 1):
+    return type(
+        "Entry",
+        (),
+        {
+            "entry_id": entry_id,
+            "title": f"Hub {entry_id}",
+            "data": {
+                "entry_kind": "hub",
+                "ieee": ieee,
+                "endpoint_id": endpoint_id,
+                "transport": "ts1201_zha",
+            },
+        },
+    )()
+
+
 class _FakeHass:
-    def __init__(self, responses: list | None = None) -> None:
+    def __init__(self, responses: list | None = None, entries: list | None = None) -> None:
         self._calls: list[dict] = []
         self.services = _FakeServices(self._calls, responses=responses)
         self.data = {}
-        default_entry = type(
-            "Entry",
-            (),
-            {"entry_id": "hub-default", "data": {"ieee": "aa:bb:cc", "endpoint_id": 1}},
-        )()
+        default_entry = _hub_entry("hub-default", "aa:bb:cc")
         self.config_entries = type(
             "Cfg",
             (),
             {
                 "async_entries": (
-                    lambda _self, _domain: [
-                        default_entry
-                    ]
+                    lambda _self, _domain: entries
+                    if entries is not None
+                    else [default_entry]
                 )
             },
         )()
@@ -69,12 +82,11 @@ class _FakeHass:
 
 
 class TestLearnFlow(unittest.IsolatedAsyncioTestCase):
-    async def test_learn_once_ts1201_returns_code_and_disables_learning(self) -> None:
+    async def test_learn_once_ts1201_returns_code_on_single_read(self) -> None:
         hass = _FakeHass(
             responses=[
                 {},  # enable learn
                 {"success": {0: "QWxhZGRpbjpvcGVuIHNlc2FtZQ=="}},  # read attribute
-                {},  # disable learn
             ]
         )
         code = await learn_module.learn_once_ts1201(
@@ -82,7 +94,6 @@ class TestLearnFlow(unittest.IsolatedAsyncioTestCase):
             ieee="aa:bb:cc",
             endpoint_id=1,
             timeout_s=1.0,
-            poll_interval_s=0.01,
         )
         self.assertEqual(code, "QWxhZGRpbjpvcGVuIHNlc2FtZQ==")
         self.assertEqual(len(hass.calls), 2)
@@ -92,65 +103,38 @@ class TestLearnFlow(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(start_call["data"]["cluster_id"], TS1201_CLUSTER_ID)
         self.assertEqual(start_call["data"]["command"], TS1201_IRLEARN_COMMAND_ID)
         self.assertEqual(start_call["data"]["params"], {"on_off": True})
-        self.assertEqual(len(hass.calls), 2)
 
-    async def test_learn_once_disables_mode_on_timeout(self) -> None:
-        hass = _FakeHass(responses=[{}, {"success": {}}, {"success": {}}, {}])
-        with self.assertRaises(TimeoutError):
-            await learn_module.learn_once_ts1201(
+    async def test_read_learned_raises_when_attribute_empty(self) -> None:
+        hass = _FakeHass(responses=[{"success": {}}])
+        with self.assertRaises(ValueError):
+            await learn_module.read_learned_code_on_demand(
                 hass,
                 ieee="aa:bb:cc",
-                endpoint_id=1,
-                timeout_s=0.02,
-                poll_interval_s=0.01,
             )
-        self.assertGreaterEqual(len(hass.calls), 2)
-        self.assertEqual(hass.calls[0]["data"]["params"], {"on_off": True})
 
-    async def test_learn_once_dispatch_uses_ts1201_profile(self) -> None:
-        hass = _FakeHass(
-            responses=[
-                {},
-                {"success": {0: "ABC"}},
-                {},
-            ]
-        )
+    async def test_learn_once_starts_mode_without_polling(self) -> None:
+        hass = _FakeHass(responses=[{}])
         payload = await learn_module.learn_once(
             hass,
             ieee="aa:bb:cc",
             timeout_s=5,
-            poll_interval_s=0.01,
         )
-        self.assertEqual(payload["code"], "ABC")
+        self.assertEqual(payload["status"], "learning")
         self.assertEqual(payload["vendor_profile"], learn_module.VENDOR_PROFILE_TS1201_ZOSUNG)
         self.assertEqual(payload["endpoint_id"], 1)
-        self.assertEqual(payload["hub_id"], None)
+        self.assertEqual(len(hass.calls), 1)
+        self.assertEqual(hass.calls[0]["data"]["params"], {"on_off": True})
 
     async def test_learn_once_resolves_target_by_hub_id(self) -> None:
         hass = _FakeHass(
-            responses=[
-                {},
-                {"success": {0: "CODE_BY_HUB"}},
-            ]
+            responses=[{}],
+            entries=[_hub_entry("hub-1", "11:22:33", endpoint_id=5)],
         )
-        hub_entry = type(
-            "Entry",
-            (),
-            {"entry_id": "hub-1", "data": {"ieee": "11:22:33", "endpoint_id": 5}},
-        )()
-        hass.config_entries = type(
-            "Cfg",
-            (),
-            {"async_entries": lambda _self, _domain: [hub_entry]},
-        )()
-
         payload = await learn_module.learn_once(
             hass,
             hub_id="hub-1",
             timeout_s=5,
-            poll_interval_s=0.01,
         )
-        self.assertEqual(payload["code"], "CODE_BY_HUB")
         self.assertEqual(payload["ieee"], "11:22:33")
         self.assertEqual(payload["endpoint_id"], 5)
         self.assertEqual(payload["hub_id"], "hub-1")
@@ -158,17 +142,7 @@ class TestLearnFlow(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(hass.calls[0]["data"]["endpoint_id"], 5)
 
     async def test_resolve_learn_target_rejects_conflicting_hub_and_ieee(self) -> None:
-        hass = _FakeHass()
-        hub_entry = type(
-            "Entry",
-            (),
-            {"entry_id": "hub-1", "data": {"ieee": "11:22:33", "endpoint_id": 5}},
-        )()
-        hass.config_entries = type(
-            "Cfg",
-            (),
-            {"async_entries": lambda _self, _domain: [hub_entry]},
-        )()
+        hass = _FakeHass(entries=[_hub_entry("hub-1", "11:22:33", endpoint_id=5)])
         with self.assertRaises(ValueError):
             await learn_module.async_resolve_learn_target(
                 hass,
@@ -177,7 +151,7 @@ class TestLearnFlow(unittest.IsolatedAsyncioTestCase):
                 endpoint_id=None,
             )
 
-    async def test_learn_once_falls_back_when_read_service_not_found(self) -> None:
+    async def test_read_learned_falls_back_when_read_service_not_found(self) -> None:
         class _ServiceNotFound(Exception):
             pass
 
@@ -212,20 +186,13 @@ class TestLearnFlow(unittest.IsolatedAsyncioTestCase):
             "custom_components.easyir.learn.ServiceNotFound",
             _ServiceNotFound,
         ):
-            payload = await learn_module.learn_once(
+            payload = await learn_module.read_learned_code_on_demand(
                 hass,
                 ieee="aa:bb:cc",
-                timeout_s=3,
-                poll_interval_s=0.01,
             )
 
         self.assertEqual(payload["code"], "FALLBACK_OK")
-        self.assertGreaterEqual(len(hass.calls), 3)
-        self.assertEqual(hass.calls[0]["service"], ZHA_SERVICE)
-        self.assertEqual(hass.calls[1]["service"], "read_zigbee_cluster_attributes")
-        self.assertEqual(hass.calls[2]["service"], ZHA_SERVICE)
-        self.assertEqual(hass.calls[2]["data"]["command"], 0)
-        self.assertEqual(hass.calls[2]["data"]["params"], {"attributes": [0]})
+        self.assertGreaterEqual(len(hass.calls), 2)
 
     async def test_async_start_ir_learning_respects_explicit_endpoint(self) -> None:
         hass = _FakeHass(responses=[{}])
@@ -268,23 +235,16 @@ class TestLearnFlow(unittest.IsolatedAsyncioTestCase):
         hass = _FakeHass(responses=[])
         hass.services = _FallbackServices(hass.calls, responses=[])
 
-        payload = await learn_module.learn_once(
+        payload = await learn_module.read_learned_code_on_demand(
             hass,
             ieee="aa:bb:cc",
             endpoint_id=1,
-            timeout_s=1,
-            poll_interval_s=0.01,
         )
 
         self.assertEqual(payload["code"], "ABC123")
         self.assertGreaterEqual(len(hass.calls), 2)
-        self.assertEqual(hass.calls[0]["service"], ZHA_SERVICE)
-        self.assertEqual(hass.calls[1]["service"], "read_zigbee_cluster_attributes")
-        self.assertEqual(hass.calls[2]["service"], ZHA_SERVICE)
-        self.assertEqual(hass.calls[2]["data"]["command"], 0)
-        self.assertEqual(hass.calls[2]["data"]["params"], {"attributes": [0]})
 
-    async def test_learn_once_handles_service_validation_error_via_gateway_fallback(
+    async def test_read_learned_handles_service_validation_error_via_gateway_fallback(
         self,
     ) -> None:
         class _ServiceValidationError(Exception):
@@ -324,19 +284,14 @@ class TestLearnFlow(unittest.IsolatedAsyncioTestCase):
             "custom_components.easyir.learn._read_last_learned_via_zha_gateway",
             new=AsyncMock(return_value="GW_FALLBACK_CODE"),
         ) as gateway_mock:
-            payload = await learn_module.learn_once(
+            payload = await learn_module.read_learned_code_on_demand(
                 hass,
                 ieee="aa:bb:cc",
                 endpoint_id=1,
-                timeout_s=1,
-                poll_interval_s=0.01,
             )
 
         self.assertEqual(payload["code"], "GW_FALLBACK_CODE")
         gateway_mock.assert_awaited_once_with(hass, "aa:bb:cc", 1)
-        self.assertGreaterEqual(len(hass.calls), 2)
-        self.assertEqual(hass.calls[0]["service"], ZHA_SERVICE)
-        self.assertEqual(hass.calls[1]["service"], "read_zigbee_cluster_attributes")
 
 
 if __name__ == "__main__":

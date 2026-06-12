@@ -13,7 +13,13 @@ from homeassistant.components import http
 from homeassistant.core import HomeAssistant, callback
 
 from ..const import CONF_HUB_ID, CONF_IEEE, DOMAIN
-from ..learn import async_detect_ir_learn_profile, async_resolve_learn_target, learn_once
+from ..hub_registry import iter_hub_entries
+from ..learn import (
+    async_detect_ir_learn_profile,
+    async_resolve_learn_target,
+    read_learned_code_on_demand,
+    start_learn_mode,
+)
 from .ha_bridge import get_domain_event_log, resolve_ieee_primary_area_id
 from .event_log import build_inbound_event
 from ..helpers import decode_ir_payload_auto
@@ -312,22 +318,13 @@ class EasyIrSignalLogStartLearnView(http.HomeAssistantView):
         vendor_profile = str(target["vendor_profile"])
 
         try:
-            result = await learn_once(
+            result = await start_learn_mode(
                 hass,
                 hub_id=resolved_hub_id,
                 ieee=resolved_ieee,
                 endpoint_id=resolved_endpoint_id,
                 timeout_s=timeout_s,
             )
-        except TimeoutError as err:
-            _LOGGER.warning(
-                "StartLearn timeout hub_id=%s ieee=%s endpoint_id=%s timeout_s=%s",
-                resolved_hub_id,
-                resolved_ieee,
-                resolved_endpoint_id,
-                timeout_s,
-            )
-            return self.json_message(str(err), HTTPStatus.REQUEST_TIMEOUT)
         except ValueError as err:
             _LOGGER.warning(
                 "StartLearn bad request hub_id=%s ieee=%s endpoint_id=%s: %s",
@@ -349,6 +346,62 @@ class EasyIrSignalLogStartLearnView(http.HomeAssistantView):
                 f"StartLearn internal error: {type(err).__name__}: {err}",
                 HTTPStatus.INTERNAL_SERVER_ERROR,
             )
+        return self.json(
+            {
+                "ok": True,
+                "hub_id": resolved_hub_id,
+                "ieee": resolved_ieee,
+                "endpoint_id": resolved_endpoint_id,
+                "vendor_profile": vendor_profile,
+                "result": result,
+                "read_on_demand": True,
+            }
+        )
+
+
+class EasyIrSignalLogReadLearnView(http.HomeAssistantView):
+    """Read learned IR code on demand (after start_learn)."""
+
+    url = "/api/easyir/signal_log/read_learned"
+    name = "api:easyir:signal_log:read_learned"
+    requires_auth = True
+
+    async def post(self, request: web.Request) -> web.Response:
+        hass: HomeAssistant = request.app[http.KEY_HASS]
+        try:
+            raw_payload = await request.json()
+        except Exception:
+            return self.json_message("Invalid JSON payload", HTTPStatus.BAD_REQUEST)
+        try:
+            payload = START_LEARN_SCHEMA(raw_payload or {})
+        except vol.Invalid as err:
+            return self.json_message(str(err), HTTPStatus.BAD_REQUEST)
+
+        hub_id = str(payload.get(CONF_HUB_ID, "")).strip() or None
+        ieee = str(payload.get(CONF_IEEE, "")).strip() or None
+        endpoint_id_raw = payload.get("endpoint_id")
+        endpoint_id = int(endpoint_id_raw) if endpoint_id_raw is not None else None
+        if hub_id is None and ieee is None:
+            return self.json_message(
+                "Provide learn target via hub_id or ieee",
+                HTTPStatus.BAD_REQUEST,
+            )
+
+        try:
+            result = await read_learned_code_on_demand(
+                hass,
+                hub_id=hub_id,
+                ieee=ieee,
+                endpoint_id=endpoint_id,
+            )
+        except ValueError as err:
+            return self.json_message(str(err), HTTPStatus.BAD_REQUEST)
+        except Exception as err:
+            return self.json_message(
+                f"ReadLearned internal error: {type(err).__name__}: {err}",
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
+
         code = result.get("code")
         if isinstance(code, str) and code.strip():
             try:
@@ -359,41 +412,27 @@ class EasyIrSignalLogStartLearnView(http.HomeAssistantView):
                 timings = None
                 protocol_hint = "learn_code"
             try:
-                room_id = resolve_ieee_primary_area_id(hass, resolved_ieee)
+                room_id = resolve_ieee_primary_area_id(hass, str(result.get(CONF_IEEE, ieee)))
             except Exception:
                 room_id = None
             try:
                 get_domain_event_log(hass).append(
                     build_inbound_event(
                         room_id=room_id,
-                        ieee=resolved_ieee,
+                        ieee=str(result.get(CONF_IEEE, ieee)),
                         timings=timings,
                         protocol_hint=protocol_hint,
                         integrity_metadata={
-                            "source": "signal_log_start_learn",
-                            "vendor_profile": vendor_profile,
-                            "endpoint_id": resolved_endpoint_id,
-                            "hub_id": resolved_hub_id,
+                            "source": "signal_log_read_learned",
+                            "hub_id": result.get(CONF_HUB_ID),
                         },
                         decoded={"code_base64": code},
                     )
                 )
             except Exception:
-                # Learn result is still valid; avoid surfacing 500 from log write path.
-                _LOGGER.exception(
-                    "StartLearn captured code but failed to append Signal Log event"
-                )
-        return self.json(
-            {
-                "ok": True,
-                "hub_id": resolved_hub_id,
-                "ieee": resolved_ieee,
-                "endpoint_id": resolved_endpoint_id,
-                "vendor_profile": vendor_profile,
-                "result": result,
-                "code": code,
-            }
-        )
+                _LOGGER.exception("ReadLearned failed to append Signal Log event")
+
+        return self.json({"ok": True, "result": result, "code": code})
 
 
 class EasyIrSignalLogHubsView(http.HomeAssistantView):
@@ -406,7 +445,7 @@ class EasyIrSignalLogHubsView(http.HomeAssistantView):
     async def get(self, request: web.Request) -> web.Response:
         hass: HomeAssistant = request.app[http.KEY_HASS]
         hubs: list[dict[str, Any]] = []
-        for entry in hass.config_entries.async_entries(DOMAIN):
+        for entry in iter_hub_entries(hass):
             ieee_raw = entry.data.get(CONF_IEEE)
             ieee = str(ieee_raw).strip() if ieee_raw else None
             endpoint_raw = entry.data.get("endpoint_id")
@@ -436,5 +475,6 @@ def async_register_signal_log_api(hass: HomeAssistant) -> None:
     hass.http.register_view(EasyIrSignalLogEventsView)
     hass.http.register_view(EasyIrSignalLogPageView)
     hass.http.register_view(EasyIrSignalLogStartLearnView)
+    hass.http.register_view(EasyIrSignalLogReadLearnView)
     hass.http.register_view(EasyIrSignalLogHubsView)
     root["_signal_log_api_registered"] = True

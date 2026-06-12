@@ -1,7 +1,12 @@
 {
   "config": {
     "abort": {
-      "zha_not_configured": "Configure ZHA first, then add EasyIR."
+      "zha_not_configured": "Configure ZHA first, then add EasyIR.",
+      "unknown_ieee": "Could not read Zigbee IEEE from the discovered device.",
+      "invalid_device": "Selected device was not found.",
+      "hub_not_found": "No EasyIR hub is configured to attach a remote.",
+      "invalid_import": "Remote import data is incomplete.",
+      "not_hub_entry": "Options are only available for IR hub entries."
     },
     "error": {
       "invalid_device": "Selected device was not found.",
@@ -10,61 +15,62 @@
     },
     "step": {
       "user": {
-        "title": "EasyIR",
-        "description": "Pick your ZHA IR device (picker prefers TS1201 models). Built-in profiles ship with EasyIR; custom path is optional.%optional_supported",
+        "title": "Add IR Hub",
+        "description": "Choose a discovered TS1201 hub or select a ZHA device manually."
+      },
+      "hub_manual": {
+        "title": "Select IR Hub",
+        "description": "Pick your ZHA IR blaster (TS1201).",
         "data": {
           "zha_device": "ZHA device",
+          "endpoint_id": "Endpoint id"
+        }
+      },
+      "hub_confirm": {
+        "title": "Confirm IR Hub",
+        "description": "Configure {hub_name} and optionally add the first virtual remote.",
+        "data": {
+          "endpoint_id": "Endpoint id",
+          "add_remote": "Add IR remote now"
+        }
+      },
+      "hub_remote": {
+        "title": "Add IR Remote",
+        "description": "Attach a virtual remote profile to hub {hub_title}.",
+        "data": {
           "profile_choice": "IR profile",
-          "profile_path": "Custom profile path (only if you chose Custom path)",
-          "endpoint_id": "Default endpoint id"
+          "profile_path": "Custom profile path",
+          "remote_name": "Remote name"
+        }
+      },
+      "menu": {
+        "title": "Hub options",
+        "menu_options": {
+          "add_remote": "Add IR remote"
         }
       }
     }
   },
   "services": {
+    "start_learn": {
+      "name": "Start IR learn mode",
+      "description": "Enable learn mode on the hub without polling. Use read_learned_ir to fetch the code."
+    },
+    "read_learned_ir": {
+      "name": "Read learned IR code",
+      "description": "Single on-demand read of the last learned code from the hub."
+    },
+    "capture_inbound_ir": {
+      "name": "Capture inbound IR",
+      "description": "Listen for inbound ZHA IR events for a limited time (no always-on loop)."
+    },
     "learn_code": {
-      "name": "Learn IR code from hub (legacy alias)",
-      "description": "Compatibility alias for learn_once. Uses the same one-shot learn flow.",
-      "fields": {
-        "hub_id": {
-          "name": "Hub ID",
-          "description": "Optional EasyIR config entry id (preferred target selector)."
-        },
-        "ieee": {
-          "name": "IEEE",
-          "description": "Optional if default IEEE is set via integration UI setup."
-        },
-        "endpoint_id": {
-          "name": "Endpoint id",
-          "description": "Optional endpoint id (default 1)."
-        },
-        "timeout_s": {
-          "name": "Timeout seconds",
-          "description": "Maximum wait time for one learned code."
-        }
-      }
+      "name": "Start learn mode (legacy alias)",
+      "description": "Compatibility alias for start_learn / learn_once."
     },
     "learn_once": {
-      "name": "Learn IR code from hub",
-      "description": "Enable IR learn mode on a supported hub, wait for one remote button press, read learned code, then rely on hub auto-exit from learn mode.",
-      "fields": {
-        "hub_id": {
-          "name": "Hub ID",
-          "description": "Optional EasyIR config entry id (preferred target selector)."
-        },
-        "ieee": {
-          "name": "IEEE",
-          "description": "Optional if default IEEE is set via integration UI setup."
-        },
-        "endpoint_id": {
-          "name": "Endpoint id",
-          "description": "Optional endpoint id (default 1)."
-        },
-        "timeout_s": {
-          "name": "Timeout seconds",
-          "description": "Maximum wait time for one learned code."
-        }
-      }
+      "name": "Start learn mode (legacy alias)",
+      "description": "Starts IR learn mode without attribute polling."
     }
   }
 }

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Iterable
 from dataclasses import dataclass
 import logging
@@ -75,23 +74,22 @@ def _normalize_ieee(value: str) -> str:
 
 
 def _entry_for_ieee(hass: HomeAssistant, ieee: str) -> dict[str, Any] | None:
-    want = _normalize_ieee(ieee)
-    for entry in hass.config_entries.async_entries(DOMAIN):
-        current = _normalize_ieee(str(entry.data.get(CONF_IEEE, "")))
-        if current == want:
-            return dict(entry.data)
-    return None
+    from .hub_registry import hub_entry_for_ieee
+
+    entry = hub_entry_for_ieee(hass, ieee)
+    if entry is None:
+        return None
+    return dict(entry.data)
 
 
 def _entry_for_hub_id(hass: HomeAssistant, hub_id: str) -> dict[str, Any] | None:
     """Return config entry data for a specific EasyIR hub entry id."""
-    target = str(hub_id).strip()
-    if not target:
+    from .hub_registry import hub_entry_by_id
+
+    entry = hub_entry_by_id(hass, str(hub_id).strip())
+    if entry is None:
         return None
-    for entry in hass.config_entries.async_entries(DOMAIN):
-        if entry.entry_id == target:
-            return dict(entry.data)
-    return None
+    return dict(entry.data)
 
 
 def _entry_endpoint_id(entry_data: dict[str, Any] | None) -> int:
@@ -603,8 +601,10 @@ def _extract_learn_attr_code(result: Any) -> str | None:
 
 async def async_list_configured_learn_hubs(hass: HomeAssistant) -> list[dict[str, Any]]:
     """Return configured EasyIR hubs suitable for learn operations."""
+    from .hub_registry import iter_hub_entries
+
     hubs: list[dict[str, Any]] = []
-    for entry in hass.config_entries.async_entries(DOMAIN):
+    for entry in iter_hub_entries(hass):
         data = dict(entry.data)
         ieee = str(data.get(CONF_IEEE, "")).strip()
         if not ieee:
@@ -636,32 +636,96 @@ async def async_read_learned_ir_code(
         raise ValueError(f"Unsupported learn vendor profile: {vendor_profile}")
     entry_data = _entry_for_ieee(hass, ieee)
     endpoint_id = _entry_endpoint_id(entry_data)
-    result = await async_call_pooled_service(
+    adapter = Ts1201LearnAdapter()
+    return await adapter.async_read_learned_code(
         hass,
-        ieee=ieee,
-        domain=ZHA_DOMAIN,
-        service=ZHA_SERVICE,
-        data={
-            "ieee": ieee,
-            "endpoint_id": endpoint_id,
-            "cluster_id": TS1201_CLUSTER_ID,
-            "cluster_type": TS1201_CLUSTER_TYPE,
-            "command": 0,
-            "command_type": TS1201_COMMAND_TYPE,
-            "params": {"attributes": [IR_LEARN_ATTRIBUTE_ID]},
-        },
-        return_response=True,
-        dedupe=False,
-        priority=1,
+        ieee,
+        endpoint_id=endpoint_id,
     )
-    code = _extract_learn_attr_code(result)
-    if not code:
-        raise ValueError("Learned IR code attribute is empty")
-    return {
-        "code": code,
-        "attribute_id": IR_LEARN_ATTRIBUTE_ID,
-        "vendor_profile": VENDOR_PROFILE_TS1201_ZOSUNG,
-    }
+
+
+async def start_learn_mode(
+    hass: HomeAssistant,
+    *,
+    ieee: str | None = None,
+    hub_id: str | None = None,
+    endpoint_id: int | None = None,
+    timeout_s: int = 30,
+) -> dict[str, Any]:
+    """Enable IR learn mode on the hub (no polling — read separately on demand)."""
+    resolved_target = await async_resolve_learn_target(
+        hass,
+        hub_id=hub_id,
+        ieee=ieee,
+        endpoint_id=endpoint_id,
+    )
+    resolved_ieee = str(resolved_target[CONF_IEEE])
+    resolved_endpoint_id = int(resolved_target["endpoint_id"])
+    vendor_profile = str(resolved_target["vendor_profile"])
+    result = await async_start_ir_learning(
+        hass,
+        ieee=resolved_ieee,
+        vendor_profile=vendor_profile,
+        endpoint_id=resolved_endpoint_id,
+        timeout_s=timeout_s,
+    )
+    result[CONF_IEEE] = resolved_ieee
+    result["endpoint_id"] = resolved_endpoint_id
+    result[CONF_HUB_ID] = resolved_target.get(CONF_HUB_ID)
+    result["vendor_profile"] = vendor_profile
+    return result
+
+
+async def read_learned_code_on_demand(
+    hass: HomeAssistant,
+    *,
+    ieee: str | None = None,
+    hub_id: str | None = None,
+    endpoint_id: int | None = None,
+) -> dict[str, Any]:
+    """Read last learned IR code once (caller decides when to invoke)."""
+    resolved_target = await async_resolve_learn_target(
+        hass,
+        hub_id=hub_id,
+        ieee=ieee,
+        endpoint_id=endpoint_id,
+    )
+    resolved_ieee = str(resolved_target[CONF_IEEE])
+    vendor_profile = str(resolved_target["vendor_profile"])
+    payload = await async_read_learned_ir_code(
+        hass,
+        ieee=resolved_ieee,
+        vendor_profile=vendor_profile,
+    )
+    payload[CONF_IEEE] = resolved_ieee
+    payload["endpoint_id"] = int(resolved_target["endpoint_id"])
+    payload[CONF_HUB_ID] = resolved_target.get(CONF_HUB_ID)
+    return payload
+
+
+async def stop_learn_mode(
+    hass: HomeAssistant,
+    *,
+    ieee: str | None = None,
+    hub_id: str | None = None,
+) -> dict[str, Any]:
+    """Request learn mode stop (TS1201 may auto-exit without explicit stop)."""
+    resolved_target = await async_resolve_learn_target(
+        hass,
+        hub_id=hub_id,
+        ieee=ieee,
+        endpoint_id=None,
+    )
+    resolved_ieee = str(resolved_target[CONF_IEEE])
+    vendor_profile = str(resolved_target["vendor_profile"])
+    result = await async_stop_ir_learning(
+        hass,
+        ieee=resolved_ieee,
+        vendor_profile=vendor_profile,
+    )
+    result[CONF_IEEE] = resolved_ieee
+    result[CONF_HUB_ID] = resolved_target.get(CONF_HUB_ID)
+    return result
 
 
 async def learn_once(
@@ -673,56 +737,15 @@ async def learn_once(
     timeout_s: int,
     poll_interval_s: float = 0.8,
 ) -> dict[str, Any]:
-    """
-    Learn one IR payload from a hub-specific learn profile.
-
-    For TS1201:
-    - enable IRLearn,
-    - poll last learned attribute,
-    - disable IRLearn on success/timeout/failure.
-    """
-    resolved_target = await async_resolve_learn_target(
+    """Compatibility alias: start learn mode only (no attribute polling loop)."""
+    _ = poll_interval_s
+    return await start_learn_mode(
         hass,
-        hub_id=hub_id,
         ieee=ieee,
+        hub_id=hub_id,
         endpoint_id=endpoint_id,
-    )
-    resolved_ieee = str(resolved_target[CONF_IEEE])
-    resolved_endpoint_id = int(resolved_target["endpoint_id"])
-    vendor_profile = str(resolved_target["vendor_profile"])
-    if vendor_profile != VENDOR_PROFILE_TS1201_ZOSUNG:
-        raise ValueError(f"Unsupported learn vendor profile: {vendor_profile}")
-    adapter = Ts1201LearnAdapter()
-    await adapter.async_start_learning(
-        hass,
-        resolved_ieee,
         timeout_s=timeout_s,
-        endpoint_id=resolved_endpoint_id,
     )
-    try:
-        start = asyncio.get_running_loop().time()
-        while True:
-            try:
-                payload = await adapter.async_read_learned_code(
-                    hass,
-                    resolved_ieee,
-                    endpoint_id=resolved_endpoint_id,
-                )
-                payload[CONF_IEEE] = resolved_ieee
-                payload["endpoint_id"] = resolved_endpoint_id
-                payload[CONF_HUB_ID] = resolved_target.get(CONF_HUB_ID)
-                return payload
-            except ValueError:
-                pass
-            if asyncio.get_running_loop().time() - start >= timeout_s:
-                raise TimeoutError("IR learn mode timeout")
-            await asyncio.sleep(max(0.1, poll_interval_s))
-    finally:
-        await adapter.async_stop_learning(
-            hass,
-            resolved_ieee,
-            endpoint_id=resolved_endpoint_id,
-        )
 
 
 async def learn_once_ts1201(
@@ -733,34 +756,21 @@ async def learn_once_ts1201(
     timeout_s: float,
     poll_interval_s: float = 0.8,
 ) -> str:
-    """Backward-compatible helper used by tests and callers expecting raw code string."""
-    adapter = Ts1201LearnAdapter()
-    await adapter.async_start_learning(
+    """Start learn mode and perform a single on-demand attribute read."""
+    _ = poll_interval_s
+    await async_start_ir_learning(
         hass,
-        ieee,
-        timeout_s=int(timeout_s),
+        ieee=ieee,
+        vendor_profile=VENDOR_PROFILE_TS1201_ZOSUNG,
         endpoint_id=endpoint_id,
+        timeout_s=int(timeout_s),
     )
-    try:
-        start = asyncio.get_running_loop().time()
-        while True:
-            try:
-                payload = await adapter.async_read_learned_code(
-                    hass,
-                    ieee,
-                    endpoint_id=endpoint_id,
-                )
-                code = payload.get("code")
-                if isinstance(code, str) and code:
-                    return code
-            except ValueError:
-                pass
-            if asyncio.get_running_loop().time() - start >= float(timeout_s):
-                raise TimeoutError("IR learn mode timeout")
-            await asyncio.sleep(max(0.1, poll_interval_s))
-    finally:
-        await adapter.async_stop_learning(
-            hass,
-            ieee,
-            endpoint_id=endpoint_id,
-        )
+    payload = await async_read_learned_ir_code(
+        hass,
+        ieee=ieee,
+        vendor_profile=VENDOR_PROFILE_TS1201_ZOSUNG,
+    )
+    code = payload.get("code")
+    if not isinstance(code, str) or not code:
+        raise ValueError("No learned IR code available")
+    return code

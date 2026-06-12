@@ -1,10 +1,15 @@
 send_raw:
-  name: Send raw IR via TS1201
-  description: Encode raw mark/space timings to Tuya TS1201 base64 and send via ZHA.
+  name: Send raw IR via hub
+  description: Encode raw mark/space timings and send through an EasyIR hub transport.
   fields:
+    hub_id:
+      required: false
+      description: EasyIR hub config entry id (preferred).
+      selector:
+        text:
     ieee:
       required: false
-      description: Optional if default IEEE is set via integration UI setup.
+      description: Zigbee IEEE of the IR hub.
       example: "8c:65:a3:ff:fe:92:63:ce"
       selector:
         text:
@@ -24,16 +29,18 @@ send_raw:
 
 send_profile_command:
   name: Send command from profile json
-  description: Read profile json command, convert to TS1201 format and send via ZHA.
+  description: Resolve profile command and send IR through a hub.
   fields:
+    hub_id:
+      required: false
+      selector:
+        text:
     ieee:
       required: false
-      description: Optional if default IEEE is set via integration UI setup.
       selector:
         text:
     profile_path:
-      required: false
-      description: Optional if default profile path is set via integration UI setup.
+      required: true
       example: "/config/ir/7062.json"
       selector:
         text:
@@ -73,23 +80,94 @@ send_profile_command:
           max: 240
           mode: box
 
-learn_once:
-  name: Learn IR code from hub
-  description: Enable IR learn mode on a supported hub, wait for one remote button press, then read learned code from hub attribute.
+start_learn:
+  name: Start IR learn mode on hub
+  description: Enable IR learn mode without polling. Use read_learned_ir to fetch code on demand.
   fields:
     hub_id:
       required: false
-      description: EasyIR hub config entry id. Preferred target selector for Learn.
       selector:
         text:
     ieee:
       required: false
-      description: Optional fallback target when hub_id is not provided.
       selector:
         text:
     endpoint_id:
       required: false
-      description: Optional. If omitted, endpoint from selected hub/config entry is used.
+      selector:
+        number:
+          min: 1
+          max: 240
+          mode: box
+    timeout_s:
+      required: false
+      default: 25
+      selector:
+        number:
+          min: 5
+          max: 120
+          mode: box
+
+read_learned_ir:
+  name: Read learned IR code (on demand)
+  description: Single attribute read from hub after learn mode was started.
+  fields:
+    hub_id:
+      required: false
+      selector:
+        text:
+    ieee:
+      required: false
+      selector:
+        text:
+    endpoint_id:
+      required: false
+      selector:
+        number:
+          min: 1
+          max: 240
+          mode: box
+
+stop_learn:
+  name: Stop IR learn mode
+  description: Request learn mode stop (device may auto-exit on TS1201).
+  fields:
+    hub_id:
+      required: false
+      selector:
+        text:
+    ieee:
+      required: false
+      selector:
+        text:
+
+capture_inbound_ir:
+  name: Capture inbound IR (on demand)
+  description: Listen for ZHA inbound IR events for a limited duration (no always-on loop).
+  fields:
+    duration_s:
+      required: false
+      default: 30
+      selector:
+        number:
+          min: 1
+          max: 300
+          mode: box
+
+learn_once:
+  name: Start learn mode (legacy alias)
+  description: Alias for start_learn without attribute polling loop.
+  fields:
+    hub_id:
+      required: false
+      selector:
+        text:
+    ieee:
+      required: false
+      selector:
+        text:
+    endpoint_id:
+      required: false
       selector:
         number:
           min: 1
@@ -105,22 +183,19 @@ learn_once:
           mode: box
 
 learn_code:
-  name: Learn IR code from hub (legacy alias)
+  name: Start learn mode (legacy alias)
   description: Backward-compatible alias for learn_once.
   fields:
     hub_id:
       required: false
-      description: EasyIR hub config entry id. Preferred target selector for Learn.
       selector:
         text:
     ieee:
       required: false
-      description: Optional fallback target when hub_id is not provided.
       selector:
         text:
     endpoint_id:
       required: false
-      description: Optional. If omitted, endpoint from selected hub/config entry is used.
       selector:
         number:
           min: 1

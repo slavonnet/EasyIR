@@ -5,7 +5,8 @@ from __future__ import annotations
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 
-from .const import DOMAIN, ZHA_DOMAIN
+from .const import ZHA_DOMAIN
+from .hub_registry import configured_hub_ieees
 
 
 def _is_ts1201_model(device: dr.DeviceEntry) -> bool:
@@ -13,6 +14,17 @@ def _is_ts1201_model(device: dr.DeviceEntry) -> bool:
     model = (device.model or "").strip()
     model_id = (getattr(device, "model_id", None) or "").strip()
     return model == "TS1201" or model_id == "TS1201"
+
+
+def ieee_from_zha_device(device: dr.DeviceEntry) -> str | None:
+    """Extract Zigbee IEEE from a ZHA device registry entry."""
+    for dom, value in device.identifiers:
+        if dom == ZHA_DOMAIN:
+            return str(value)
+    for conn_kind, value in device.connections:
+        if conn_kind == "zigbee":
+            return str(value)
+    return None
 
 
 def iter_zha_ts1201_devices(hass: HomeAssistant) -> list[dr.DeviceEntry]:
@@ -32,25 +44,15 @@ def iter_zha_ts1201_devices(hass: HomeAssistant) -> list[dr.DeviceEntry]:
 
 def list_onboarding_hub_choices(hass: HomeAssistant) -> list[tuple[str, str]]:
     """Return (device_registry_id, label) pairs for supported-but-unconfigured hubs."""
-    configured: set[str] = set()
-    for entry in hass.config_entries.async_entries(DOMAIN):
-        ieee = str(entry.data.get("ieee", "")).lower().replace(" ", "")
-        if ieee:
-            configured.add(ieee)
+    configured = configured_hub_ieees(hass)
 
     choices: list[tuple[str, str]] = []
     for dev in iter_zha_ts1201_devices(hass):
-        ieee = None
-        for dom, value in dev.identifiers:
-            if dom == ZHA_DOMAIN:
-                ieee = str(value).lower().replace(" ", "")
-                break
-        if ieee is None:
-            for conn_kind, value in dev.connections:
-                if conn_kind == "zigbee":
-                    ieee = str(value).lower().replace(" ", "")
-                    break
-        if ieee is None or ieee in configured:
+        ieee_raw = ieee_from_zha_device(dev)
+        if ieee_raw is None:
+            continue
+        ieee = ieee_raw.lower().replace(" ", "")
+        if ieee in configured:
             continue
         label = dev.name_by_user or dev.name or ieee
         choices.append((dev.id, f"{label} ({ieee})"))

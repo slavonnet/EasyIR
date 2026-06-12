@@ -12,6 +12,7 @@ from homeassistant.helpers import dispatcher
 from homeassistant.helpers import entity_registry as er
 
 from ..const import CONF_IEEE, CONF_VISIBLE_AREA_IDS, DOMAIN, TS1201_CLUSTER_ID
+from ..hub_registry import hub_entry_for_ieee
 from ..helpers import DecodedIRPayload, decode_ir_payload_auto
 from .event_log import IrEventLog, build_inbound_event, build_outbound_event
 
@@ -49,12 +50,10 @@ def _normalize_ieee(value: str) -> str:
 
 
 def _entry_data_for_ieee(hass: HomeAssistant, ieee: str) -> dict[str, Any] | None:
-    want = _normalize_ieee(ieee)
-    for ent in hass.config_entries.async_entries(DOMAIN):
-        current = _normalize_ieee(str(ent.data.get(CONF_IEEE, "")))
-        if current == want:
-            return dict(ent.data)
-    return None
+    entry = hub_entry_for_ieee(hass, ieee)
+    if entry is None:
+        return None
+    return dict(entry.data)
 
 
 def _iter_payload_values(value: Any) -> Iterable[Any]:
@@ -163,7 +162,7 @@ def log_outbound_send(
 
 @callback
 def async_setup_inbound_listener(hass: HomeAssistant) -> None:
-    """Listen for decoded inbound signals and apply room-scoped sync (once)."""
+    """Register inbound decoded dispatcher (no always-on ZHA event polling)."""
     if hass.data.get(DOMAIN, {}).get("_inbound_listener_ready"):
         return
     hass.data.setdefault(DOMAIN, {})["_inbound_listener_ready"] = True
@@ -244,14 +243,44 @@ def async_setup_inbound_listener(hass: HomeAssistant) -> None:
                 payload,
             )
 
+    dispatcher.async_dispatcher_connect(hass, SIGNAL_INBOUND_DECODED, _on_inbound)
+
+
+@callback
+def async_start_inbound_capture(hass: HomeAssistant, *, duration_s: float = 30.0) -> None:
+    """Listen for ZHA inbound IR only while capture is active (on-demand)."""
+    root = hass.data.setdefault(DOMAIN, {})
+    remove = root.get("_inbound_capture_unsub")
+    if callable(remove):
+        remove()
+
     @callback
     def _on_zha_event(event: Event) -> None:
-        """Capture inbound IR payloads from ZHA events for Signal Log."""
         data = event.data if isinstance(event.data, Mapping) else {}
         async_handle_zha_event_for_easyir(hass, data)
 
-    dispatcher.async_dispatcher_connect(hass, SIGNAL_INBOUND_DECODED, _on_inbound)
-    hass.bus.async_listen("zha_event", _on_zha_event)
+    unsub = hass.bus.async_listen("zha_event", _on_zha_event)
+    root["_inbound_capture_unsub"] = unsub
+
+    async def _stop_later() -> None:
+        import asyncio
+
+        await asyncio.sleep(max(1.0, float(duration_s)))
+        current = root.get("_inbound_capture_unsub")
+        if current is unsub:
+            unsub()
+            root.pop("_inbound_capture_unsub", None)
+
+    hass.async_create_task(_stop_later())
+
+
+@callback
+def async_stop_inbound_capture(hass: HomeAssistant) -> None:
+    """Stop on-demand ZHA inbound capture listener."""
+    root = hass.data.get(DOMAIN, {})
+    remove = root.pop("_inbound_capture_unsub", None)
+    if callable(remove):
+        remove()
 
 
 @callback
