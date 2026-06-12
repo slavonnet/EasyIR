@@ -36,6 +36,7 @@ from .const import (
 )
 from .endpoint import endpoint_for_ieee, endpoint_for_zha_device
 from .hub_registry import (
+    configured_hub_ieees,
     hub_ref_by_id,
     hub_subentry_data,
     iter_hub_refs,
@@ -346,6 +347,10 @@ class _HubPickMixin:
     _hub_device_name: str | None
     _hub_endpoint_id: int
 
+    def _is_hub_ieee_already_configured(self, ieee: str) -> bool:
+        """Check active hub set only (ignore stale removed subentries)."""
+        return ieee.lower().replace(" ", "") in configured_hub_ieees(self.hass)
+
     async def _async_manual_hub_pick_label(self) -> str:
         from homeassistant.helpers import translation
 
@@ -399,8 +404,8 @@ class _HubPickMixin:
             if resolved is None:
                 return self.async_abort(reason="unknown_ieee")  # type: ignore[attr-defined]
             ieee, default_name, endpoint_id = resolved
-            await self.async_set_unique_id(ieee.lower().replace(" ", ""))  # type: ignore[attr-defined]
-            self._abort_if_unique_id_configured()  # type: ignore[attr-defined]
+            if self._is_hub_ieee_already_configured(ieee):
+                return self.async_abort(reason="already_configured")  # type: ignore[attr-defined]
             hub_name = str(user_input.get(CONF_HUB_NAME, "")).strip() or default_name
             return await self._async_create_hub_subentry(
                 ieee=ieee,
@@ -457,8 +462,8 @@ class IrHubSubentryFlow(_HubPickMixin, ConfigSubentryFlow):
         if self._hub_ieee is not None:
             default_name = self._hub_device_name or f"IR Hub {self._hub_ieee}"
             if user_input is not None:
-                await self.async_set_unique_id(self._hub_ieee.lower().replace(" ", ""))
-                self._abort_if_unique_id_configured()
+                if self._is_hub_ieee_already_configured(self._hub_ieee):
+                    return self.async_abort(reason="already_configured")
                 hub_name = str(user_input.get(CONF_HUB_NAME, "")).strip() or default_name
                 return await self._async_create_hub_subentry(
                     ieee=self._hub_ieee,
@@ -494,8 +499,8 @@ class IrHubSubentryFlow(_HubPickMixin, ConfigSubentryFlow):
                     errors["base"] = "unknown_ieee"
                 else:
                     ieee, default_name, endpoint_id = resolved
-                    await self.async_set_unique_id(ieee.lower().replace(" ", ""))
-                    self._abort_if_unique_id_configured()
+                    if self._is_hub_ieee_already_configured(ieee):
+                        return self.async_abort(reason="already_configured")
                     hub_name = str(user_input.get(CONF_HUB_NAME, "")).strip() or default_name
                     return await self._async_create_hub_subentry(
                         ieee=ieee,
@@ -785,8 +790,6 @@ class IrRemoteSubentryFlow(ConfigSubentryFlow):
     ) -> FlowResult:
         slug = Path(profile_path).stem
         unique = self._next_remote_unique_id(hub_id=hub_id, profile_path=profile_path)
-        await self.async_set_unique_id(unique)
-        self._abort_if_unique_id_configured()
         title = remote_name or f"Remote {slug}"
         base_unique = f"{hub_id}_{slug}"
         if unique != base_unique and not remote_name:

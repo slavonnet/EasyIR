@@ -106,7 +106,7 @@ class EasyIrMainPanel extends HTMLElement {
       </style>
       <h2>EasyIR</h2>
       <div class="row">
-        <button id="add-hub">Добавить хаб</button>
+        <button id="add-hub">Добавить Хаб</button>
         <button id="add-remote">Добавить пульт</button>
       </div>
       <div class="status" id="status"></div>
@@ -168,10 +168,10 @@ class EasyIrMainPanel extends HTMLElement {
         ? remotes.map((r) =>
             `<div class="remote-item"><strong>${this._esc(r.title || "Пульт")}</strong><div class="hint">${this._esc(r.profile_path || "")}</div></div>`
           ).join("")
-        : `<div class="hint">Пультов пока нет.</div>`;
+        : "";
       wrapper.innerHTML = `
         <div class="hub-title">${this._esc(hub.title || "IR Hub")} <span class="hint">(${this._esc(hub.ieee || "")})</span></div>
-        <div class="remote-list">${remotesHtml}</div>
+        ${remotes.length ? `<div class="remote-list">${remotesHtml}</div>` : ""}
       `;
       tree.appendChild(wrapper);
     }
@@ -187,7 +187,7 @@ class EasyIrMainPanel extends HTMLElement {
       this._discoverableHubs = (discover && discover.devices) || [];
       this._areas = (areas && areas.areas) || [];
       if (!this._discoverableHubs.length) {
-        this._setStatus("Все поддерживаемые хабы уже добавлены.");
+        this._setStatus("Нет устройств, которые можно добавить: все поддерживаемые хабы уже добавлены.");
         return;
       }
       const hubOptions = this._discoverableHubs
@@ -259,6 +259,8 @@ class EasyIrMainPanel extends HTMLElement {
       brands: [],
       devices: [],
       remote_name: "",
+      brand_query: "",
+      device_query: "",
     };
     this._renderWizardStep();
   }
@@ -270,6 +272,7 @@ class EasyIrMainPanel extends HTMLElement {
     );
     this._wizard.brands = (response && response.brands) || [];
     this._wizard.brand = this._wizard.brands.length ? this._wizard.brands[0].brand : null;
+    this._wizard.brand_query = "";
   }
 
   async _loadDevicesForBrand() {
@@ -279,6 +282,7 @@ class EasyIrMainPanel extends HTMLElement {
     );
     this._wizard.devices = (response && response.devices) || [];
     this._wizard.profile_choice = this._wizard.devices.length ? this._wizard.devices[0].value : null;
+    this._wizard.device_query = "";
   }
 
   _wizardHubSelectHtml() {
@@ -332,19 +336,31 @@ class EasyIrMainPanel extends HTMLElement {
     }
 
     if (w.step === 2) {
-      const cards = w.brands
+      const brandQuery = String(w.brand_query || "").trim().toLowerCase();
+      const visibleBrands = w.brands.filter((item) => item.brand.toLowerCase().includes(brandQuery));
+      if (!visibleBrands.length && w.brand_query) {
+        w.brand = null;
+      } else if (!w.brand && visibleBrands.length) {
+        w.brand = visibleBrands[0].brand;
+      }
+      const cards = visibleBrands
         .map((item) => `<div class="card ${w.brand === item.brand ? "selected" : ""}" data-brand="${this._escAttr(item.brand)}"><strong>${this._esc(item.brand)}</strong><div class="hint">${item.count} моделей</div></div>`)
         .join("");
       this._openModal(`
         <div class="wizard-title">Шаг 2 из 3: бренд</div>
         <div class="wizard-sub">Сетка брендов без длинного списка.</div>
-        <div class="grid">${cards}</div>
+        <div class="field"><label>Поиск бренда</label><input id="wiz-brand-search" type="text" value="${this._escAttr(w.brand_query || "")}" placeholder="Введите бренд"/></div>
+        ${visibleBrands.length ? `<div class="grid">${cards}</div>` : `<div class="hint">По текущему поиску бренды не найдены.</div>`}
         <div class="actions">
           <button id="wiz-back">Назад</button>
           <button id="wiz-cancel">Отмена</button>
           <button id="wiz-next" ${w.brand ? "" : "disabled"}>Далее</button>
         </div>
       `);
+      this.shadowRoot.getElementById("wiz-brand-search").addEventListener("input", (ev) => {
+        w.brand_query = ev.target.value || "";
+        this._renderWizardStep();
+      });
       this.shadowRoot.querySelectorAll(".card[data-brand]").forEach((node) => {
         node.addEventListener("click", () => {
           w.brand = node.dataset.brand;
@@ -372,13 +388,19 @@ class EasyIrMainPanel extends HTMLElement {
       return;
     }
 
-    const cards = w.devices
+    const deviceQuery = String(w.device_query || "").trim().toLowerCase();
+    const visibleDevices = w.devices.filter((item) => String(item.label || "").toLowerCase().includes(deviceQuery));
+    if (!visibleDevices.some((item) => item.value === w.profile_choice)) {
+      w.profile_choice = visibleDevices.length ? visibleDevices[0].value : null;
+    }
+    const cards = visibleDevices
       .map((item) => `<div class="card ${w.profile_choice === item.value ? "selected" : ""}" data-profile="${this._escAttr(item.value)}">${this._esc(item.label)}</div>`)
       .join("");
     this._openModal(`
       <div class="wizard-title">Шаг 3 из 3: устройство</div>
       <div class="wizard-sub">Сетка устройств (несколько колонок, с прокруткой).</div>
-      <div class="grid devices">${cards}</div>
+      <div class="field"><label>Поиск устройства</label><input id="wiz-device-search" type="text" value="${this._escAttr(w.device_query || "")}" placeholder="Введите модель"/></div>
+      ${visibleDevices.length ? `<div class="grid devices">${cards}</div>` : `<div class="hint">По текущему поиску устройства не найдены.</div>`}
       <div class="field"><label>Имя пульта (необязательно)</label><input id="wiz-remote-name" type="text" value="${this._escAttr(w.remote_name || "")}" placeholder="Например: LG в гостиной"/></div>
       <div class="actions">
         <button id="wiz-back">Назад</button>
@@ -386,6 +408,10 @@ class EasyIrMainPanel extends HTMLElement {
         <button id="wiz-create" ${w.profile_choice ? "" : "disabled"}>Создать пульт</button>
       </div>
     `);
+    this.shadowRoot.getElementById("wiz-device-search").addEventListener("input", (ev) => {
+      w.device_query = ev.target.value || "";
+      this._renderWizardStep();
+    });
     this.shadowRoot.querySelectorAll(".card[data-profile]").forEach((node) => {
       node.addEventListener("click", () => {
         w.profile_choice = node.dataset.profile;
