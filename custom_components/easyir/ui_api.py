@@ -54,6 +54,7 @@ CREATE_REMOTE_SCHEMA = vol.Schema(
         vol.Required("hub_id"): vol.All(str, vol.Length(min=1)),
         vol.Required("remote_type"): REMOTE_TYPE_SCHEMA,
         vol.Required("profile_choice"): vol.All(str, vol.Length(min=1)),
+        vol.Optional("brand"): str,
         vol.Optional(CONF_REMOTE_NAME): str,
         vol.Optional(CONF_PROFILE_PATH): str,
     }
