@@ -125,18 +125,28 @@ class EasyIrConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if not self.hass.config_entries.async_entries(ZHA_DOMAIN):
             return self.async_abort(reason="zha_not_configured")
 
-        if user_input is not None and CONF_MANAGE_ACTION in user_input:
-            action = str(user_input[CONF_MANAGE_ACTION]).strip()
+        existing_hubs = iter_hub_entries(self.hass)
+        if user_input is None and existing_hubs and source not in (ACTION_ADD_HUB, "hub_remote"):
+            return await self.async_step_manage()
+
+        return await self._async_step_pick_hub(user_input)
+
+    async def async_step_manage(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Add hub or remote when EasyIR is already configured."""
+        existing_hubs = iter_hub_entries(self.hass)
+        if not existing_hubs:
+            return await self._async_step_pick_hub(None)
+
+        if user_input is not None:
+            action = str(user_input.get(CONF_MANAGE_ACTION, "")).strip()
             if action == ACTION_ADD_REMOTE:
                 return await self.async_step_hub_remote()
             if action == ACTION_ADD_HUB:
                 return await self._async_step_pick_hub(None)
 
-        existing_hubs = iter_hub_entries(self.hass)
-        if user_input is None and existing_hubs and source not in (ACTION_ADD_HUB, "hub_remote"):
-            return await self._async_show_manage_menu(existing_hubs)
-
-        return await self._async_step_pick_hub(user_input)
+        return await self._async_show_manage_menu(existing_hubs)
 
     async def _async_manage_action_label(self, action: str) -> str:
         from homeassistant.helpers import translation
@@ -511,7 +521,7 @@ class EasyIrOptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_add_remote(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        self.hass.config_entries.flow.async_init(
+        await self.hass.config_entries.flow.async_init(
             DOMAIN,
             context={
                 "source": "hub_remote",
@@ -523,7 +533,7 @@ class EasyIrOptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_add_hub(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        self.hass.config_entries.flow.async_init(
+        await self.hass.config_entries.flow.async_init(
             DOMAIN,
             context={"source": ACTION_ADD_HUB},
         )

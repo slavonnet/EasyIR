@@ -2,6 +2,13 @@
 
 All notable changes to EasyIR are documented here.
 
+## [0.1.3] - 2026-06-12
+
+### Fixed
+
+- Config flow: added missing `async_step_manage` handler (error «doesn't support step manage» when choosing **Add remote** on repeat onboarding).
+- Options flow and post-hub remote chain: `await` on `config_entries.flow.async_init`.
+
 ## [0.1.2] - 2026-06-12
 
 ### Fixed

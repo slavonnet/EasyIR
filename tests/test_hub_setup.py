@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 from types import MappingProxyType
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from custom_components.easyir import _async_offer_remote_setup
 from custom_components.easyir.const import DOMAIN
@@ -24,7 +24,7 @@ class TestOfferRemoteSetup(unittest.IsolatedAsyncioTestCase):
 
         hass = MagicMock()
         hass.config_entries.async_update_entry = MagicMock()
-        hass.config_entries.flow.async_init = MagicMock()
+        hass.config_entries.flow.async_init = AsyncMock()
 
         await _async_offer_remote_setup(hass, entry)
 
@@ -34,7 +34,7 @@ class TestOfferRemoteSetup(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("offer_remote_setup", updated_data)
         self.assertEqual(updated_data["ieee"], "aa:bb:cc:dd:ee:ff")
 
-        hass.config_entries.flow.async_init.assert_called_once_with(
+        hass.config_entries.flow.async_init.assert_awaited_once_with(
             DOMAIN,
             context={
                 "source": "hub_remote",
@@ -48,7 +48,7 @@ class TestOfferRemoteSetup(unittest.IsolatedAsyncioTestCase):
 
         hass = MagicMock()
         hass.config_entries.async_update_entry = MagicMock()
-        hass.config_entries.flow.async_init = MagicMock()
+        hass.config_entries.flow.async_init = AsyncMock()
 
         await _async_offer_remote_setup(hass, entry)
 

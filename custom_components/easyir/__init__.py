@@ -392,7 +392,7 @@ async def _async_offer_remote_setup(hass: HomeAssistant, entry: ConfigEntry) -> 
     data = dict(entry.data)
     data.pop("offer_remote_setup", None)
     hass.config_entries.async_update_entry(entry, data=data)
-    hass.config_entries.flow.async_init(
+    await hass.config_entries.flow.async_init(
         DOMAIN,
         context={
             "source": "hub_remote",
