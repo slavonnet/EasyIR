@@ -35,6 +35,12 @@ class TestRemoteButtonSpecs(unittest.TestCase):
         self.assertIn("ionizer_off", keys)
         self.assertIn("energy_saving_on", keys)
         self.assertIn("auto_clean_on", keys)
+        self.assertIn("jet_on", keys)
+        self.assertIn("swing_on", keys)
+        self.assertIn("wall_swing_on", keys)
+        self.assertIn("light", keys)
+        self.assertIn("power_down", keys)
+        self.assertIn("clear_timers", keys)
         self.assertFalse(any(k.startswith("cool_") for k in keys))
 
         ion_on = next(s for s in specs if s.key == "ionizer_on")
@@ -46,6 +52,7 @@ class TestRemoteButtonSpecs(unittest.TestCase):
 
         off_btn = next(s for s in specs if s.key == "off")
         self.assertEqual(off_btn.kind, ButtonCommandKind.STATE_FRAME)
+        self.assertEqual(off_btn.label, "Power toggle")
 
     def test_minimal_profile_off_only(self) -> None:
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as handle:

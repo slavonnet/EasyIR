@@ -323,6 +323,13 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     return True
 
 
+async def _async_entry_update_listener(
+    hass: HomeAssistant, entry: ConfigEntry
+) -> None:
+    """Keep EasyIR device tree in sync after entry/subentry changes."""
+    await async_setup_devices_for_entry(hass, entry)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up the single EasyIR parent config entry."""
     hass.data.setdefault(DOMAIN, {})
@@ -330,6 +337,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN].setdefault("remote_buttons", {})
     hass.data[DOMAIN].setdefault("ir_transport", Ts1201ZhaTransport())
     hass.data[DOMAIN][entry.entry_id] = entry
+    entry.async_on_unload(entry.add_update_listener(_async_entry_update_listener))
 
     await async_setup_devices_for_entry(hass, entry)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

@@ -22,6 +22,8 @@ from .hub_registry import (
 from .remote_buttons import ButtonCommandKind, RemoteButtonSpec, list_remote_button_specs
 from .remote_events import async_fire_button_pressed, async_send_profile_to_hubs
 
+DATA_REMOTE_POWER_STATE = "remote_power_state"
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -29,6 +31,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up remote button entities for remote subentries."""
+    hass.data.setdefault(DOMAIN, {}).setdefault(DATA_REMOTE_POWER_STATE, {})
     entities: list[EasyIrRemoteButton] = []
     for remote in iter_remote_refs(hass, entry):
         profile_path = str(remote.data[CONF_PROFILE_PATH])
@@ -82,6 +85,8 @@ class EasyIrRemoteButton(ButtonEntity):
         await super().async_added_to_hass()
         registry = self.hass.data.setdefault(DOMAIN, {}).setdefault("remote_buttons", {})
         registry[(self._remote.subentry_id, self._spec.key)] = self
+        if self._spec.action == "off":
+            self._apply_power_button_label(self._current_assumed_power_on())
 
     async def async_will_remove_from_hass(self) -> None:
         await super().async_will_remove_from_hass()
@@ -94,6 +99,38 @@ class EasyIrRemoteButton(ButtonEntity):
         attrs["pressed"] = pressed
         self._attr_extra_state_attributes = attrs
         self.async_write_ha_state()
+
+    def _power_state_store(self) -> dict[str, bool]:
+        return self.hass.data.setdefault(DOMAIN, {}).setdefault(DATA_REMOTE_POWER_STATE, {})
+
+    def _current_assumed_power_on(self) -> bool:
+        return bool(self._power_state_store().get(self._remote.subentry_id, False))
+
+    def _set_assumed_power_state(self, power_on: bool) -> None:
+        store = self._power_state_store()
+        store[self._remote.subentry_id] = bool(power_on)
+        self._refresh_off_button_entity()
+
+    def _toggle_assumed_power_state(self) -> None:
+        self._set_assumed_power_state(not self._current_assumed_power_on())
+
+    def _apply_power_button_label(self, power_on: bool) -> None:
+        if self._spec.action != "off":
+            return
+        self._attr_name = "Power off" if power_on else "Power on"
+        attrs = dict(self._attr_extra_state_attributes or {})
+        attrs["power_state_assumed_on"] = power_on
+        self._attr_extra_state_attributes = attrs
+        self.async_write_ha_state()
+
+    def _refresh_off_button_entity(self) -> None:
+        registry = self.hass.data.get(DOMAIN, {}).get("remote_buttons", {})
+        off_button = registry.get((self._remote.subentry_id, "off"))
+        if off_button is None:
+            return
+        off_button._apply_power_button_label(  # pylint: disable=protected-access
+            self._current_assumed_power_on()
+        )
 
     async def async_press(self) -> None:
         """User pressed the button: update state, fire event, send IR."""
@@ -129,6 +166,11 @@ class EasyIrRemoteButton(ButtonEntity):
                 temperature=temperature,
                 entity_id=self.entity_id,
             )
+            if self._spec.action == "off":
+                self._toggle_assumed_power_state()
+            elif self._spec.kind == ButtonCommandKind.STATE_FRAME:
+                # Any explicit HVAC frame means AC should be on.
+                self._set_assumed_power_state(True)
             if self._spec.feature_key and self._spec.action.endswith("_on"):
                 attrs = dict(self._attr_extra_state_attributes or {})
                 attrs[f"feature_{self._spec.feature_key}_on"] = True

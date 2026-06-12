@@ -2,6 +2,24 @@
 
 All notable changes to EasyIR are documented here.
 
+## [0.2.1-beta1] - 2026-06-12
+
+### Fixed
+
+- Add remote flow no longer crashes with `Handler IrRemoteSubentryFlow doesn't support step hub_remote`.
+- Add hub (subentry) now aborts with explicit message when all supported discovered hubs are already added.
+- Device registry tree sync is refreshed after entry/subentry updates, keeping hub -> remote hierarchy stable.
+
+### Changed
+
+- Remote onboarding wizard is now explicit and step-based:
+  - step 1/3: remote type,
+  - step 2/3: brand,
+  - step 3/3: device/profile.
+- Signal Log panel learn UX: added **GetLearned** button and split feedback into "learn started" vs "code read".
+- LG bundled profile `7062` expanded with additional feature flags (`jet`, `swing`, `wall_swing`, `light`, `power_down`, `clear_timers`).
+- Power button label on the virtual remote now reflects assumed state (`Power on` / `Power off`) instead of static `Power off`.
+
 ## [0.1.5] - 2026-06-12
 
 ### Fixed

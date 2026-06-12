@@ -57,6 +57,8 @@ _LG_FEATURE_BUTTONS: dict[str, list[tuple[str, str, str]]] = {
         ("wall_swing_off", "Wall swing off", "wall_swing"),
     ],
     "light": [("light", "Light toggle", "light")],
+    "power_down": [("power_down", "Power down", "power_down")],
+    "clear_timers": [("clear_timers", "Clear timers", "clear_timers")],
 }
 
 
@@ -169,7 +171,8 @@ def list_remote_button_specs(profile_path: str) -> list[RemoteButtonSpec]:
             specs.append(
                 RemoteButtonSpec(
                     key="off",
-                    label="Power off",
+                    # LG off command is effectively a power toggle on many units.
+                    label="Power toggle",
                     action="off",
                     kind=ButtonCommandKind.STATE_FRAME,
                 )

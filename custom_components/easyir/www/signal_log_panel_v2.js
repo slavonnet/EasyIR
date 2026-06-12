@@ -118,6 +118,7 @@ class EasyIrSignalLogPanel extends HTMLElement {
         <label for="learn-timeout">Timeout (s)</label>
         <input id="learn-timeout" type="number" min="5" max="120" value="20" />
         <button id="start-learn" type="button">StartLearn</button>
+        <button id="get-learned" type="button">GetLearned</button>
       </div>
       <div class="row">
         <label for="room">Room (area id)</label>
@@ -156,6 +157,9 @@ class EasyIrSignalLogPanel extends HTMLElement {
     });
     this.shadowRoot.getElementById("start-learn").addEventListener("click", () => {
       this._startLearn();
+    });
+    this.shadowRoot.getElementById("get-learned").addEventListener("click", () => {
+      this._readLearned();
     });
     this.shadowRoot.getElementById("load").addEventListener("click", () => {
       this._offset = 0;
@@ -217,6 +221,27 @@ class EasyIrSignalLogPanel extends HTMLElement {
     const endpoint_id = Number.isNaN(endpointRaw) ? null : Math.max(1, Math.min(240, endpointRaw));
     const timeout_s = Number.isNaN(timeoutRaw) ? 20 : Math.max(5, Math.min(120, timeoutRaw));
     const payload = { timeout_s };
+    if (selectedHubId) {
+      payload.hub_id = selectedHubId;
+    }
+    if (ieee) {
+      payload.ieee = ieee;
+    }
+    if (endpoint_id !== null) {
+      payload.endpoint_id = endpoint_id;
+    }
+    return payload;
+  }
+
+  _readLearnedPayload() {
+    const selectedHubId = this.shadowRoot.getElementById("learn-hub").value.trim();
+    const ieee = this.shadowRoot.getElementById("learn-ieee").value.trim();
+    const endpointRaw = Number.parseInt(this.shadowRoot.getElementById("learn-endpoint").value || "1", 10);
+    if (!selectedHubId && !ieee) {
+      throw new Error("Learn target is required: select hub or enter IEEE");
+    }
+    const endpoint_id = Number.isNaN(endpointRaw) ? null : Math.max(1, Math.min(240, endpointRaw));
+    const payload = {};
     if (selectedHubId) {
       payload.hub_id = selectedHubId;
     }
@@ -329,16 +354,13 @@ class EasyIrSignalLogPanel extends HTMLElement {
       return;
     }
     this._setBusy(true);
-    this._setStatus("Starting learn... Press remote button now.");
+    this._setStatus("Starting learn mode...");
     try {
       const result = await this._hass.callApi("POST", "easyir/signal_log/start_learn", payload);
       const vendor = result && result.vendor_profile ? ` vendor=${result.vendor_profile}` : "";
       const hub = result && result.hub_id ? ` hub=${result.hub_id}` : "";
-      const codeLen = result && result.code ? ` code_len=${String(result.code).length}` : "";
-      const source = result && result.source_encoding ? ` source=${result.source_encoding}` : "";
-      this._setStatusOk(`Learn completed.${hub}${vendor}${source}${codeLen}`);
-      this._offset = 0;
-      await this._load(false);
+      const timeout = payload && payload.timeout_s ? ` timeout=${payload.timeout_s}s` : "";
+      this._setStatusOk(`Learn mode started.${hub}${vendor}${timeout} Press remote button, then click GetLearned.`);
     } catch (err) {
       const msg = this._extractErrorMessage(err);
       this._setStatusError(`StartLearn error: ${msg}`);
@@ -347,9 +369,49 @@ class EasyIrSignalLogPanel extends HTMLElement {
     }
   }
 
+  async _readLearned() {
+    if (!this._hass || this._loading) {
+      return;
+    }
+    let reloadAfter = false;
+    let payload;
+    try {
+      payload = this._readLearnedPayload();
+    } catch (err) {
+      this._setStatusError(err.message || String(err));
+      return;
+    }
+    this._setBusy(true);
+    this._setStatus("Reading learned code...");
+    try {
+      const response = await this._hass.callApi("POST", "easyir/signal_log/read_learned", payload);
+      const code = response && response.code ? String(response.code) : "";
+      if (!code) {
+        this._setStatusError("GetLearned returned empty code. Try pressing remote and retry.");
+      } else {
+        const source = response && response.result && response.result.vendor_profile
+          ? ` vendor=${response.result.vendor_profile}`
+          : "";
+        this._setStatusOk(`GetLearned success.${source} code_len=${code.length}`);
+        this._offset = 0;
+        reloadAfter = true;
+      }
+    } catch (err) {
+      const msg = this._extractErrorMessage(err);
+      this._setStatusError(`GetLearned error: ${msg}`);
+    } finally {
+      this._setBusy(false);
+      if (reloadAfter) {
+        await this._load(false);
+      }
+    }
+  }
+
   _setBusy(value) {
     this._loading = value;
     this.shadowRoot.getElementById("load").disabled = value;
+    this.shadowRoot.getElementById("start-learn").disabled = value;
+    this.shadowRoot.getElementById("get-learned").disabled = value;
     const more = this.shadowRoot.getElementById("more");
     if (value) {
       more.disabled = true;
