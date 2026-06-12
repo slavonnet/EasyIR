@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import inspect
+from typing import Any
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
@@ -25,6 +28,27 @@ def _normalize_ieee(value: str) -> str:
     return value.lower().replace(" ", "")
 
 
+def _device_create_kwargs(reg: dr.DeviceRegistry, fields: dict[str, Any]) -> dict[str, Any]:
+    """Build async_get_or_create kwargs, skipping unsupported API fields."""
+    kwargs = dict(fields)
+    subentry_id = kwargs.pop("config_subentry_id", None)
+    if subentry_id is not None:
+        params = inspect.signature(reg.async_get_or_create).parameters
+        if "config_subentry_id" in params:
+            kwargs["config_subentry_id"] = subentry_id
+    return kwargs
+
+
+def _apply_device_area(
+    reg: dr.DeviceRegistry, device: dr.DeviceEntry, area_id: str | None
+) -> None:
+    if not area_id:
+        return
+    if device.area_id == area_id:
+        return
+    reg.async_update_device(device.id, area_id=area_id)
+
+
 async def async_setup_hub_device(
     hass: HomeAssistant, entry: ConfigEntry, hub: HubRef
 ) -> None:
@@ -33,18 +57,23 @@ async def async_setup_hub_device(
     if not ieee:
         return
     reg = dr.async_get(hass)
-    connections: set[tuple[str, str]] = set()
-    connections.add((dr.CONNECTION_ZIGBEE, _normalize_ieee(ieee)))
+    connections: set[tuple[str, str]] = {(dr.CONNECTION_ZIGBEE, _normalize_ieee(ieee))}
     area_id = str(hub.data.get(CONF_AREA_ID, "")).strip() or None
-    reg.async_get_or_create(
-        config_entry_id=entry.entry_id,
-        identifiers={hub_device_identifier(hub.subentry_id)},
-        connections=connections,
-        name=hub.title or f"IR Hub {ieee}",
-        manufacturer="EasyIR",
-        model="IR Hub",
-        area_id=area_id,
+    device = reg.async_get_or_create(
+        **_device_create_kwargs(
+            reg,
+            {
+                "config_entry_id": entry.entry_id,
+                "config_subentry_id": hub.subentry_id,
+                "identifiers": {hub_device_identifier(hub.subentry_id)},
+                "connections": connections,
+                "name": hub.title or f"IR Hub {ieee}",
+                "manufacturer": "EasyIR",
+                "model": "IR Hub",
+            },
+        )
     )
+    _apply_device_area(reg, device, area_id)
 
 
 async def async_setup_remote_device(
@@ -55,12 +84,18 @@ async def async_setup_remote_device(
         return
     reg = dr.async_get(hass)
     reg.async_get_or_create(
-        config_entry_id=entry.entry_id,
-        identifiers={remote_device_identifier(remote.subentry_id)},
-        name=remote_display_name(remote),
-        manufacturer="EasyIR",
-        model="Virtual IR Remote",
-        via_device=hub_device_identifier(hub.subentry_id),
+        **_device_create_kwargs(
+            reg,
+            {
+                "config_entry_id": entry.entry_id,
+                "config_subentry_id": remote.subentry_id,
+                "identifiers": {remote_device_identifier(remote.subentry_id)},
+                "name": remote_display_name(remote),
+                "manufacturer": "EasyIR",
+                "model": "Virtual IR Remote",
+                "via_device": hub_device_identifier(hub.subentry_id),
+            },
+        )
     )
 
 
