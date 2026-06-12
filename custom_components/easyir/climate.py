@@ -16,10 +16,10 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import CONF_PROFILE_PATH, DOMAIN, ENTRY_KIND_REMOTE
+from .devices import hub_device_identifier, remote_device_identifier
 from .hub_registry import (
     entry_kind,
     hub_entries_for_remote,
-    hub_transport_data,
     primary_hub_entry,
     remote_display_name,
 )
@@ -65,9 +65,9 @@ class EasyIrClimate(ClimateEntity):
         self._apply_capability_view(self._cap_view)
         self._attr_unique_id = f"{entry.entry_id}_climate"
         hub = primary_hub_entry(hass, entry)
-        hub_ident = (DOMAIN, hub.entry_id) if hub else None
+        hub_ident = hub_device_identifier(hub.entry_id) if hub else None
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, f"remote_{entry.entry_id}")},
+            identifiers={remote_device_identifier(entry.entry_id)},
             manufacturer="EasyIR",
             model="Virtual IR Remote",
             name=remote_display_name(entry),

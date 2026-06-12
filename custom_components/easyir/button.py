@@ -11,6 +11,7 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import CONF_PROFILE_PATH, CONF_REMOTE_NAME, DOMAIN, ENTRY_KIND_REMOTE
+from .devices import hub_device_identifier, remote_device_identifier
 from .hub_registry import entry_kind, hub_entries_for_remote, primary_hub_entry, remote_display_name
 from .remote_buttons import ButtonCommandKind, RemoteButtonSpec, list_remote_button_specs
 from .remote_events import async_fire_button_pressed, async_send_profile_to_hubs
@@ -46,11 +47,11 @@ class EasyIrRemoteButton(ButtonEntity):
         self._spec = spec
         self._pressed = False
         hub = primary_hub_entry(hass, entry)
-        hub_ident = (DOMAIN, hub.entry_id) if hub else None
+        hub_ident = hub_device_identifier(hub.entry_id) if hub else None
         self._attr_unique_id = f"{entry.entry_id}_btn_{spec.key}"
         self._attr_name = spec.label
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, f"remote_{entry.entry_id}")},
+            identifiers={remote_device_identifier(entry.entry_id)},
             name=remote_display_name(entry),
             manufacturer="EasyIR",
             model="Virtual IR Remote",

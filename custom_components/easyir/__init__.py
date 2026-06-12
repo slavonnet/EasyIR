@@ -33,6 +33,7 @@ from .const import (
     TS1201_ENDPOINT_ID,
 )
 from .command_pool import DEFAULT_POOL_INTERVAL_S, get_service_call_pool
+from .devices import async_setup_hub_device, async_setup_remote_device
 from .discovery import async_schedule_hub_discovery
 from .hub_registry import (
     hub_entry_by_id,
@@ -386,9 +387,11 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
 
 async def _async_offer_remote_setup(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Chain remote config flow after hub onboarding when requested."""
-    if not entry.data.pop("offer_remote_setup", False):
+    if not entry.data.get("offer_remote_setup"):
         return
-    hass.config_entries.async_update_entry(entry, data=dict(entry.data))
+    data = dict(entry.data)
+    data.pop("offer_remote_setup", None)
+    hass.config_entries.async_update_entry(entry, data=data)
     hass.config_entries.flow.async_init(
         DOMAIN,
         context={
@@ -410,7 +413,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if is_remote_entry(entry):
         platforms = list(PLATFORMS)
     if is_hub_entry(entry):
+        await async_setup_hub_device(hass, entry)
         await _async_offer_remote_setup(hass, entry)
+    if is_remote_entry(entry):
+        await async_setup_remote_device(hass, entry)
 
     if platforms:
         await hass.config_entries.async_forward_entry_setups(entry, platforms)

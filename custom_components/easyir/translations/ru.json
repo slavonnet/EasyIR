@@ -26,24 +26,34 @@
       },
       "hub_manual": {
         "title": "Выбор IR-хаба",
-        "description": "Выберите IR-передатчик ZHA (модель TS1201).",
+        "description": "Выберите IR-передатчик ZHA (модель TS1201). Endpoint подбирается автоматически.",
         "data": {
-          "zha_device": "Устройство ZHA",
-          "endpoint_id": "Endpoint"
+          "zha_device": "Устройство ZHA"
         }
       },
       "hub_confirm": {
         "title": "Подтверждение IR-хаба",
-        "description": "Настройка {hub_name}. Можно сразу добавить виртуальный пульт.",
+        "description": "Добавить {hub_name} как IR-хаб. Пульт можно привязать сейчас или позже.",
         "data": {
-          "endpoint_id": "Endpoint",
           "add_remote": "Добавить пульт сейчас"
+        }
+      },
+      "manage": {
+        "title": "EasyIR",
+        "description": "Настроенные IR-хабы:\n{hubs}",
+        "data": {
+          "manage_action": "Действие"
+        },
+        "options": {
+          "add_hub": "Добавить IR-хаб",
+          "add_remote": "Добавить пульт"
         }
       },
       "hub_remote": {
         "title": "Добавить пульт",
         "description": "Привязать профиль пульта к хабу {hub_title}.",
         "data": {
+          "hub_entry_id": "IR-хаб",
           "profile_choice": "IR-профиль",
           "profile_path": "Свой путь к JSON",
           "remote_name": "Имя пульта"
@@ -52,7 +62,8 @@
       "menu": {
         "title": "Настройки хаба",
         "menu_options": {
-          "add_remote": "Добавить пульт"
+          "add_remote": "Добавить пульт",
+          "add_hub": "Добавить IR-хаб"
         }
       }
     }

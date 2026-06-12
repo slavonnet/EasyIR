@@ -26,24 +26,34 @@
       },
       "hub_manual": {
         "title": "Select IR Hub",
-        "description": "Pick your ZHA IR blaster (TS1201).",
+        "description": "Pick your ZHA IR blaster (TS1201). Endpoint is detected automatically.",
         "data": {
-          "zha_device": "ZHA device",
-          "endpoint_id": "Endpoint id"
+          "zha_device": "ZHA device"
         }
       },
       "hub_confirm": {
         "title": "Confirm IR Hub",
-        "description": "Configure {hub_name} and optionally add the first virtual remote.",
+        "description": "Add {hub_name} as an IR hub. You can attach a virtual remote now or later.",
         "data": {
-          "endpoint_id": "Endpoint id",
           "add_remote": "Add IR remote now"
+        }
+      },
+      "manage": {
+        "title": "EasyIR",
+        "description": "Configured IR hubs:\n{hubs}",
+        "data": {
+          "manage_action": "Action"
+        },
+        "options": {
+          "add_hub": "Add IR hub",
+          "add_remote": "Add IR remote"
         }
       },
       "hub_remote": {
         "title": "Add IR Remote",
         "description": "Attach a virtual remote profile to hub {hub_title}.",
         "data": {
+          "hub_entry_id": "IR hub",
           "profile_choice": "IR profile",
           "profile_path": "Custom profile path",
           "remote_name": "Remote name"
@@ -52,7 +62,8 @@
       "menu": {
         "title": "Hub options",
         "menu_options": {
-          "add_remote": "Add IR remote"
+          "add_remote": "Add IR remote",
+          "add_hub": "Add IR hub"
         }
       }
     }

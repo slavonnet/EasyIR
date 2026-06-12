@@ -2,6 +2,24 @@
 
 All notable changes to EasyIR are documented here.
 
+## [0.1.2] - 2026-06-12
+
+### Fixed
+
+- Hub setup crash when adding a hub without remote (`MappingProxyType` has no `pop` on `entry.data`).
+- Repeat EasyIR onboarding shows a manage step (add hub / add remote) instead of mixing hub and remote on one screen.
+- Options menu on a hub entry: **Add IR hub** and **Add IR remote**.
+
+### Changed
+
+- ZHA endpoint is chosen automatically for TS1201 (default endpoint 1); removed from onboarding forms.
+- Device registry tree: IR hub under ZHA blaster, virtual remotes under hub (`via_device`).
+- Remote onboarding picks a hub when several hubs are configured.
+
+### Note
+
+- A dedicated **IR** item in Home Assistant **Settings** (like Zigbee/Bluetooth) requires core HA support; EasyIR uses the integration card, device tree, and sidebar **EasyIR Signal Log** panel instead.
+
 ## [0.1.1] - 2026-06-12
 
 ### Fixed
