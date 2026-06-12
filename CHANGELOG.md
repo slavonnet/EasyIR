@@ -2,6 +2,12 @@
 
 All notable changes to EasyIR are documented here.
 
+## [0.2.4] - 2026-06-12
+
+### Fixed
+
+- EasyIR sidebar wizard: `POST /api/easyir/ui/remotes` now accepts optional `brand` field from step 2 state and no longer fails remote creation due to strict payload validation.
+
 ## [0.2.3] - 2026-06-12
 
 ### Added
