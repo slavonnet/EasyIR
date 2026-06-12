@@ -16,9 +16,9 @@ All notable changes to EasyIR are documented here.
 - Device registry tree: IR hub under ZHA blaster, virtual remotes under hub (`via_device`).
 - Remote onboarding picks a hub when several hubs are configured.
 
-### Note
+### Documentation
 
-- A dedicated **IR** item in Home Assistant **Settings** (like Zigbee/Bluetooth) requires core HA support; EasyIR uses the integration card, device tree, and sidebar **EasyIR Signal Log** panel instead.
+- Added [`docs/roadmap.yaml`](docs/roadmap.yaml): приоритеты после v0.1.2 (миграция на HA `infrared` stack, мульти-транспорт, каталог хабов/пультов, визард, upstream PR).
 
 ## [0.1.1] - 2026-06-12
 

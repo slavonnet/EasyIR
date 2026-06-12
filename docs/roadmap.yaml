@@ -1,0 +1,248 @@
+name: EasyIR roadmap
+version: 1
+last_updated: 2026-06-12
+status: active
+
+overview: >
+  Текущий релиз (v0.1.2) — стабилизация hub-centric модели на ZHA TS1201.
+  Дальнейшая работа: унификация с платформой Home Assistant `infrared` (2026.4+),
+  мульти-транспорт (Wi‑Fi, облако, Zigbee), расширение каталога хабов и пультов,
+  визард автоопределения. PR в home-assistant/core — только после зрелости слоёв.
+
+principles:
+  - README и CHANGELOG описывают текущий релиз; roadmap задаёт целевую архитектуру.
+  - HACS-обновления не ломают существующие config entries без миграции.
+  - Предпочитать API и entity-платформы ядра HA вместо дублирования (меньше своего кода).
+  - Узкие PR, один логический коммит на задачу где возможно.
+  - TS1201/ZHA в v0.1.x — пилотный transport, не архитектурный потолок.
+
+current_release:
+  version: "0.1.2"
+  scope: >
+  - IR-хаб (config entry hub) + виртуальные пульты (remote).
+  - Обнаружение TS1201 через ZHA, авто endpoint.
+  - Climate, button, signal log, on-demand learn/capture.
+  - Не в scope релиза: HA infrared stack, Wi‑Fi/Xiaomi хабы, визард пультов.
+
+technical_requirements:
+  compatibility:
+    hard_requirements:
+      - Существующие config entries работают после обновления без перепривязки.
+      - Сервисы easyir.send_raw и easyir.send_profile_command стабильны.
+      - Пути bundled-профилей не ломаются без migration/alias.
+  ha_infrared_alignment:
+    min_ha_version: "2026.4.0"
+    reference:
+      - https://www.home-assistant.io/integrations/infrared/
+      - homeassistant.components.infrared (emitter/receiver, async_send_command)
+    strategy: >
+      Consumer-слой EasyIR поверх infrared.* entities где возможно;
+      собственный transport только для хабов без emitter entity в HA.
+
+workstreams:
+  - id: ws-ha-core-alignment
+    title: Миграция на аналоги ядра HA (приоритет #1)
+    priority: 1
+    depends_on: []
+    can_run_parallel: false
+    scope:
+      - custom_components/easyir/transports/
+      - custom_components/easyir/remote_events.py
+      - custom_components/easyir/config_flow.py
+      - custom_components/easyir/climate.py
+      - custom_components/easyir/button.py
+    notes: >
+      Сопоставить объекты EasyIR с HA infrared stack: emitter/receiver entities,
+      InfraredEmitterConsumerEntity, async_send_command, async_subscribe_receiver.
+      Адаптер ir_core → InfraredCommand (raw timings). Dual-path: infrared.* или legacy ZHA.
+
+  - id: ws-multi-transport
+    title: Любые передатчики и приёмники (не только ZHA)
+    priority: 2
+    depends_on:
+      - ws-ha-core-alignment
+    can_run_parallel: false
+    scope:
+      - custom_components/easyir/transports/
+      - custom_components/easyir/hub_registry.py
+      - custom_components/easyir/discovery.py
+    notes: >
+      Wi‑Fi IR-бластеры, ESPHome proxies (infrared domain), облачные шлюзы (Xiaomi Home и др.)
+      через единый IrTransport / привязку к infrared entity. Hub entry хранит ссылку на emitter/receiver,
+      а не только ieee+endpoint.
+
+  - id: ws-hub-catalog
+    title: Широкий каталог IR-хабов (quirks, descriptors, plugins)
+    priority: 3
+    depends_on:
+      - ws-multi-transport
+    can_run_parallel: true
+    scope:
+      - custom_components/easyir/supported_hubs.py
+      - custom_components/easyir/endpoint.py
+      - docs/hub-descriptors/
+    notes: >
+      Дескрипторы моделей, ZHA quirks mapping, плагины transport для новых чипсетов/вендоров.
+      Цель — максимально широкий спектр хабов без правок ядра EasyIR на каждую модель.
+
+  - id: ws-remote-catalog-ui
+    title: Каталог пультов, выбор профиля, визард по нажатиям
+    priority: 4
+    depends_on:
+      - ws-hub-catalog
+    can_run_parallel: true
+    scope:
+      - custom_components/easyir/config_flow.py
+      - custom_components/easyir/profiles/
+      - custom_components/easyir/assistants/
+    notes: >
+      Удобный UI выбора бренда/модели; guided wizard: пользователь жмёт кнопки на физическом пульте,
+      capture → decode → infer protocol/profile. Расширение bundled и custom профилей.
+
+  - id: ws-upstream-pr
+    title: Вклад в home-assistant/core
+    priority: 5
+    depends_on:
+      - ws-ha-core-alignment
+      - ws-hub-catalog
+    can_run_parallel: false
+    scope: []
+    notes: >
+      PR в core после стабилизации: ZHA TS1201 как InfraredEmitterEntity;
+      возможно панель IR в Settings; общие protocol helpers для AC.
+      Не блокирует релизы EasyIR.
+
+  - id: ws-sidebar-tools
+    title: Sidebar EasyIR и инструменты
+    priority: 6
+    depends_on:
+      - ws-remote-catalog-ui
+    can_run_parallel: true
+    scope:
+      - custom_components/easyir/signal_log/
+    notes: >
+      Signal log, transcoder, assistants — раздел EasyIR в sidebar (уже частично есть).
+
+initial_backlog:
+  - id: release-0-1-2-stabilize
+    content: >
+      Релиз v0.1.2: фикс hub setup без пульта, manage-step, авто endpoint,
+      device tree hub/remote, options add hub/remote.
+    status: Завершена
+    workstream: ws-ha-core-alignment
+    acceptance_criteria:
+      - Добавление хаба без пульта не падает.
+      - Повторный onboarding показывает manage (хаб / пульт).
+      - 138+ unit-тестов проходят.
+
+  - id: ir-stack-inventory
+    content: >
+      Инвентаризация: таблица «объект EasyIR → аналог в HA core» (infrared, remote, climate,
+      event, learn). Зафиксировать что мигрируем, что остаётся уникальным (lg_universal, signal log).
+    status: Запланирована
+    workstream: ws-ha-core-alignment
+    depends_on:
+      - release-0-1-2-stabilize
+    acceptance_criteria:
+      - Документ или секция в roadmap с mapping и порядком миграции.
+      - Минимальная версия HA для infrared path указана.
+
+  - id: infrared-emitter-consumer-poc
+    content: >
+      PoC: remote отправляет одну команду через homeassistant.components.infrared.async_send_command
+      при наличии ESPHome infrared emitter; fallback на Ts1201ZhaTransport.
+    status: Запланирована
+    workstream: ws-ha-core-alignment
+    depends_on:
+      - ir-stack-inventory
+    acceptance_criteria:
+      - Config entry remote может хранить infrared_entity_id (опционально).
+      - Тест с mock emitter; send_profile_command идёт через infrared API когда задан emitter.
+
+  - id: transport-abstraction-wifi-cloud
+    content: >
+      Расширить IrTransport: Wi‑Fi локальные бластеры, облачные (Xiaomi Home / MIoT и аналоги)
+      как отдельные transport plugins с единым hub registry.
+    status: Запланирована
+    workstream: ws-multi-transport
+    depends_on:
+      - infrared-emitter-consumer-poc
+    acceptance_criteria:
+      - Интерфейс transport не привязан к ZHA ieee/endpoint.
+      - Документирован минимум один не-ZHA transport (design или stub).
+
+  - id: hub-descriptor-registry
+    content: >
+      Реестр дескрипторов хабов: model, transport_id, endpoint rules, discovery source (ZHA device,
+      ESPHome, integration discovery). Добавить 2+ модели помимо TS1201.
+    status: Запланирована
+    workstream: ws-hub-catalog
+    depends_on:
+      - transport-abstraction-wifi-cloud
+    acceptance_criteria:
+      - Новый хаб добавляется дескриптором без правок config_flow core logic.
+      - Тесты discovery/filter по дескриптору.
+
+  - id: remote-profile-picker-ui
+    content: >
+      UI выбора пульта: бренд → семейство → профиль; поиск; превью capabilities (ionizer, lg28, …).
+    status: Запланирована
+    workstream: ws-remote-catalog-ui
+    depends_on:
+      - hub-descriptor-registry
+    acceptance_criteria:
+      - Config flow hub_remote использует структурированный каталог, не только flat dropdown.
+      - Переводы ru/en для новых шагов.
+
+  - id: remote-learn-wizard
+    content: >
+      Визард: capture inbound IR → decode → сопоставление с известными протоколами → предложение профиля;
+      пользователь подтверждает реакцией устройства.
+    status: Запланирована
+    workstream: ws-remote-catalog-ui
+    depends_on:
+      - remote-profile-picker-ui
+    acceptance_criteria:
+      - Flow в config или sidebar assistant; использует capture_inbound_ir / receiver subscription.
+      - Логирование в signal log.
+
+  - id: upstream-zha-ts1201-emitter
+    content: >
+      Подготовить PR в home-assistant/core: ZHA экспортирует InfraredEmitterEntity для TS1201 (и приём при наличии).
+    status: Запланирована
+    workstream: ws-upstream-pr
+    depends_on:
+      - infrared-emitter-consumer-poc
+      - hub-descriptor-registry
+    acceptance_criteria:
+      - Черновик PR или issue с ссылкой на EasyIR use case.
+      - EasyIR consumer path работает с ZHA emitter entity без прямого cluster command.
+
+  - id: deferred-ha-settings-ir-panel
+    content: >
+      Отслеживать появление панели IR в Settings HA (как Bluetooth); при появлении — интеграция EasyIR
+      в экосистему без panel_custom дублирования.
+    status: Запланирована
+    workstream: ws-upstream-pr
+    depends_on: []
+    acceptance_criteria:
+      - Запись в roadmap обновлена при изменении HA frontend.
+
+agent_task_templates:
+  ha_alignment_slice:
+    objective: Мигрировать один слой EasyIR на API ядра HA без поломки config entries.
+    compatibility_constraints:
+      - Сохранить easyir.send_raw / send_profile_command.
+      - async_migrate_entry при смене полей entry.
+    tests_to_add_or_run:
+      - python3 -m unittest discover -s tests -v
+
+  transport_slice:
+    objective: Добавить transport plugin для нового класса хабов.
+    out_of_scope:
+      - Массовое изменение bundled climate JSON.
+
+  wizard_slice:
+    objective: Шаг config flow или sidebar tool для определения пульта по нажатиям.
+    tests_to_add_or_run:
+      - Unit-тесты decode/infer; ручной чеклист в PR.

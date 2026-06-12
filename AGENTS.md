@@ -83,9 +83,9 @@ Rules:
 ## 5) Parallel execution plan for multiple agents
 
 This section below was originally drafted as a minimal execution example.
-For active multi-agent planning and task orchestration, use the active project roadmap file
-(created from `docs/agents-roadmap-example.md`) as the primary source of truth
-(detailed TR, dependencies, pilot-first sequencing, task templates).
+For active multi-agent planning and task orchestration, use [`docs/roadmap.yaml`](docs/roadmap.yaml)
+as the primary source of truth (detailed TR, dependencies, pilot-first sequencing, task templates).
+Template structure: [`docs/agents-roadmap-example.md`](docs/agents-roadmap-example.md).
 
 Use separate branches and PRs per workstream. Keep each PR narrow and mergeable.
 
