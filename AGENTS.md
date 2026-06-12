@@ -235,3 +235,13 @@ These rules are mandatory for both directly started agents and agents started by
 7. Orchestrator prompt must explicitly state the assigned workspace path for each subagent and require no writes outside that path.
 8. Before any commit/push, subagent must verify `git branch --show-current` matches assigned branch and repository path matches assigned workspace.
 9. If subagent detects unexpected files changed by another task in its workspace, it must stop and report conflict instead of trying to repair/revert others' changes.
+
+## Cursor Cloud specific instructions
+
+EasyIR is a Home Assistant **custom integration** (HACS), not a standalone app: it runs inside Home Assistant and its full end-to-end path needs ZHA + a TS1201 Zigbee IR blaster, so there is no local "run the app" target. Validate via the unit suite and by exercising the IR core directly.
+
+- **Python deps live in `/workspace/.venv`** (created by the startup update script). Activate with `. .venv/bin/activate` before running anything.
+- **HA version pin:** this base image ships Python 3.12, which caps `homeassistant` at `2025.1.4` (>= 2025.2 requires Python 3.13). `manifest.json` declares min HA `2025.7.0`, but the test suite is written to run on older HA via `tests/ha_subentry_stubs.py` (subentry API shim), so `2025.1.4` is the correct test target here — do not "fix" the version to match the manifest.
+- **Tests:** run from repo root with the venv active: `python3 -m unittest discover -s tests -v` (per section 8). `tests/__init__.py` imports `homeassistant`, so tests fail to even load without HA installed.
+- **Lint:** no linter is configured in this repo. Use `python3 -m compileall custom_components/easyir` as a syntax check.
+- **Exercising the IR core without HA:** modules under `custom_components/easyir/` (e.g. `helpers.resolve_profile_raw`, `encode_raw_to_tuya_base64`, `decode_ir_payload`) drive the real bundled profiles (`profiles/climate/7062.json` LG P12RK via the `lg28` engine, `profiles/demo_ac.json`). When importing these standalone, first call `tests.ha_subentry_stubs.install()` because `helpers.resolve_profile_raw` falls back to importing the full `custom_components.easyir` package, which needs the subentry shim on HA < 2025.7. Note: the final trailing IR gap is intentionally capped to uint16 (65535), so decode round-trips match on the frame body but not that last gap.
