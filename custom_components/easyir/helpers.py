@@ -461,6 +461,8 @@ def resolve_profile_raw(
             LG_CMD_IONIZER_ON,
             LG_CMD_JET_ON,
             LG_CMD_LIGHT,
+            LG_CMD_CLEAR_ALL,
+            LG_CMD_POWER_DOWN,
             LG_CMD_SWING_OFF,
             LG_CMD_SWING_ON,
             LG_CMD_WALL_SWING_OFF,
@@ -483,6 +485,8 @@ def resolve_profile_raw(
             LG_CMD_IONIZER_ON,
             LG_CMD_JET_ON,
             LG_CMD_LIGHT,
+            LG_CMD_CLEAR_ALL,
+            LG_CMD_POWER_DOWN,
             LG_CMD_SWING_OFF,
             LG_CMD_SWING_ON,
             LG_CMD_WALL_SWING_OFF,
@@ -510,6 +514,8 @@ def resolve_profile_raw(
             "auto_clean_on": (LG_CMD_AUTO_CLEAN_ON, "auto_clean"),
             "auto_clean_off": (LG_CMD_AUTO_CLEAN_OFF, "auto_clean"),
             "light": (LG_CMD_LIGHT, "light"),
+            "power_down": (LG_CMD_POWER_DOWN, "power_down"),
+            "clear_timers": (LG_CMD_CLEAR_ALL, "clear_timers"),
         }
 
         if normalized_action in special_actions:

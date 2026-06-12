@@ -103,21 +103,21 @@
         },
         "remote_type": {
           "title": "Remote type",
-          "description": "Select remote type for hub {hub_title}.",
+          "description": "Step 1 of 3. Select remote type for hub {hub_title}.",
           "data": {
             "remote_type": "Remote type"
           }
         },
         "remote_brand": {
           "title": "Brand",
-          "description": "Select brand for hub {hub_title}.",
+          "description": "Step 2 of 3. Select brand for hub {hub_title}.",
           "data": {
             "remote_brand": "Brand"
           }
         },
         "hub_remote": {
           "title": "Add IR Remote",
-          "description": "Attach a virtual remote profile to hub {hub_title}.",
+          "description": "Step 3 of 3. Choose device/profile and remote name for hub {hub_title}.",
           "data": {
             "hub_subentry_id": "IR hub",
             "profile_choice": "IR profile",

@@ -103,21 +103,21 @@
         },
         "remote_type": {
           "title": "Тип пульта",
-          "description": "Выберите тип пульта для хаба {hub_title}.",
+          "description": "Шаг 1 из 3. Выберите тип пульта для хаба {hub_title}.",
           "data": {
             "remote_type": "Тип пульта"
           }
         },
         "remote_brand": {
           "title": "Бренд",
-          "description": "Выберите бренд для хаба {hub_title}.",
+          "description": "Шаг 2 из 3. Выберите бренд для хаба {hub_title}.",
           "data": {
             "remote_brand": "Бренд"
           }
         },
         "hub_remote": {
           "title": "Добавить пульт",
-          "description": "Привязать профиль пульта к хабу {hub_title}.",
+          "description": "Шаг 3 из 3. Выберите устройство/профиль и имя пульта для хаба {hub_title}.",
           "data": {
             "hub_subentry_id": "IR-хаб",
             "profile_choice": "IR-профиль",

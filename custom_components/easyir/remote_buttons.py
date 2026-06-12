@@ -57,6 +57,8 @@ _LG_FEATURE_BUTTONS: dict[str, list[tuple[str, str, str]]] = {
         ("wall_swing_off", "Wall swing off", "wall_swing"),
     ],
     "light": [("light", "Light toggle", "light")],
+    "power_down": [("power_down", "Power down", "power_down")],
+    "clear_timers": [("clear_timers", "Clear timers", "clear_timers")],
 }
 
 

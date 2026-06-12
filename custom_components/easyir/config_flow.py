@@ -626,10 +626,13 @@ class IrRemoteSubentryFlow(ConfigSubentryFlow):
         selector_options: list[dict[str, str]] = []
         if catalog:
             selector_options.append(
-                {"value": REMOTE_TYPE_CLIMATE, "label": "Climate / AC"}
+                {"value": REMOTE_TYPE_CLIMATE, "label": "Кондиционер / климат"}
             )
         selector_options.append(
-            {"value": REMOTE_TYPE_ADVANCED, "label": "Advanced profile selection"}
+            {
+                "value": REMOTE_TYPE_ADVANCED,
+                "label": "Продвинутый выбор профиля",
+            }
         )
         default_type = (
             self._selected_remote_type
@@ -657,7 +660,7 @@ class IrRemoteSubentryFlow(ConfigSubentryFlow):
                     vol.Required(CONF_REMOTE_TYPE, default=default_type): selector.SelectSelector(
                         selector.SelectSelectorConfig(
                             options=selector_options,
-                            mode=selector.SelectSelectorMode.DROPDOWN,
+                            mode=selector.SelectSelectorMode.LIST,
                         )
                     )
                 }
@@ -700,7 +703,7 @@ class IrRemoteSubentryFlow(ConfigSubentryFlow):
                             options=[
                                 {"value": brand, "label": brand} for brand in brands
                             ],
-                            mode=selector.SelectSelectorMode.DROPDOWN,
+                            mode=selector.SelectSelectorMode.LIST,
                         )
                     )
                 }
@@ -759,7 +762,7 @@ class IrRemoteSubentryFlow(ConfigSubentryFlow):
                         vol.Required(CONF_PROFILE_CHOICE, default=model_default): selector.SelectSelector(
                             selector.SelectSelectorConfig(
                                 options=models,
-                                mode=selector.SelectSelectorMode.DROPDOWN,
+                                mode=selector.SelectSelectorMode.LIST,
                             )
                         ),
                         vol.Optional(CONF_REMOTE_NAME): selector.TextSelector(),

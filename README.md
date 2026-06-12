@@ -2,7 +2,7 @@
 
 Author: Badalyan Vyacheslav
 
-**Pre-release 0.1.5** — hub-centric architecture (ZHA TS1201), тестирование приветствуется. См. [CHANGELOG.md](CHANGELOG.md) и [roadmap](docs/roadmap.yaml).
+**Pre-release 0.2.1-beta1** — hub-centric architecture (ZHA TS1201), тестирование приветствуется. См. [CHANGELOG.md](CHANGELOG.md) и [roadmap](docs/roadmap.yaml).
 
 Custom Home Assistant integration for IR command delivery in Home Assistant with
 backward-compatible services and an expanding protocol/transport core.
@@ -14,7 +14,7 @@ backward-compatible services and an expanding protocol/transport core.
 - **IR hub** (TS1201/ZHA) as primary device; **virtual remotes** with profiles attach to hub(s).
 - Discovered TS1201 hubs offered when EasyIR is installed.
 - **Climate** entity for grouped HVAC control (mode + fan + temperature in one IR frame).
-- **Button** entities: power off and LG extras (ionizer, energy saving, auto clean, …) as separate commands.
+- **Button** entities: dynamic power toggle label and LG extras (ionizer, energy saving, auto clean, jet, swing, wall swing, light, power down, clear timers).
 - Converts IR timings to TS1201 base64; sends via ZHA cluster `0xE004`.
 - Services: `send_raw`, `send_profile_command`, `start_learn`, `read_learned_ir`, `capture_inbound_ir`.
 - **356+ bundled climate profiles**; LG P12RK (`7062`) with universal lg28 encoder.
@@ -28,17 +28,17 @@ backward-compatible services and an expanding protocol/transport core.
 - добавлены универсальные IR-преобразования и пилотные protocol-aware механизмы;
 - часть целевых возможностей (полный мульти-транспорт, расширенные UI-тулы, масштабирование по протоколам) еще в развитии.
 
-## Quick start (0.1.5)
+## Quick start (0.2.1-beta1)
 
 1. In HACS: **Custom repositories** → `https://github.com/slavonnet/EasyIR`, category **Integration**.
-2. Install **EasyIR** `0.1.5`, restart Home Assistant.
+2. Install **EasyIR** `0.2.1-beta1`, restart Home Assistant.
 3. **ZHA** must already be configured (TS1201 IR blaster).
 4. **First setup** — `Settings → Devices & Services → Add Integration → EasyIR`:
    - pick a **discovered TS1201 hub** or select ZHA device manually
    - set hub name + room (endpoint подбирается автоматически)
    - finish directly on the EasyIR integration page
 5. **Later** — on the EasyIR integration card, **Add entry** → **Добавить хаб** или **Добавить пульт**.
-   - add remote wizard: **type → brand → model/profile**
+   - add remote wizard: **type (step 1/3) → brand (step 2/3) → model/profile (step 3/3)**
 6. Hub entry **Configure** → same menu for hub/remote.
 7. Entities: `climate.*` (HVAC), `button.*` (off, ionizer, …).
 

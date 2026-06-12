@@ -39,6 +39,8 @@ class TestRemoteButtonSpecs(unittest.TestCase):
         self.assertIn("swing_on", keys)
         self.assertIn("wall_swing_on", keys)
         self.assertIn("light", keys)
+        self.assertIn("power_down", keys)
+        self.assertIn("clear_timers", keys)
         self.assertFalse(any(k.startswith("cool_") for k in keys))
 
         ion_on = next(s for s in specs if s.key == "ionizer_on")
