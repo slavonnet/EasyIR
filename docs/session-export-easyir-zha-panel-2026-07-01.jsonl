@@ -1,0 +1,21 @@
+{"type":"session_meta","exported_at":"2026-07-01T12:20:00Z","project":"EasyIR","branch":"cursor/zha-panel-subentries-v4-ea9f","pr":"https://github.com/slavonnet/EasyIR/pull/55","note":"Ручной экспорт cloud-сессии агентом; не полный raw transcript Cursor (tool outputs не включены)."}
+{"type":"user","timestamp":"2026-06-12","content":"Жалоба: панель EasyIR не как ZHA — одна кнопка «Добавить запись», плоский список. Онбординг: хаб → чекбокс пульт → комната → настройки пульта. Нужно: хаб+комната+имя → страница EasyIR; две кнопки; дерево хаб→пульт."}
+{"type":"assistant","timestamp":"2026-06-12","content":"Начата архитектура v4: single_config_entry + integration_type hub + subentries ir_hub/ir_remote. PR #55, v0.2.0-rc1."}
+{"type":"user","timestamp":"2026-06-12","content":"Не вижу релиза, как тестировать?"}
+{"type":"assistant","timestamp":"2026-06-12","content":"Создан pre-release v0.2.0-rc1. HACS → Переустановить → выбрать rc1. Требуется HA 2025.7+."}
+{"type":"user","timestamp":"2026-07-01","content":"Два шага онбординга вместо одного; ошибка NameError CONF_AREA_ID в hub_registry при hub_setup."}
+{"type":"assistant","timestamp":"2026-07-01","content":"Исправлен импорт CONF_AREA_ID; объединён pick_hub+hub_setup в один шаг. Релиз v0.2.0-rc2."}
+{"type":"user","timestamp":"2026-07-01","content":"Хаб добавился но setup failed: TypeError async_get_or_create unexpected keyword argument area_id"}
+{"type":"assistant","timestamp":"2026-07-01","content":"area_id перенесён на async_update_device после создания устройства. v0.2.0-rc3."}
+{"type":"user","timestamp":"2026-07-01","content":"MCP agentmemory — memory_crystallize не виден; настройки MCP менялись (gw.obs.group, потом aimem.git.obs.group)."}
+{"type":"assistant","timestamp":"2026-07-01","content":"Сервер aimem.git.obs.group доступен из облака (/agentmemory/livez OK). MCP в cloud-сессии остаётся на 7 tools (fallback shim). AGENTMEMORY_TOOLS=all нужен на сервере. memory_crystallize только после нового cloud run с proxy. memory_save: mem_mr21h7fe_8078f5d77ade."}
+{"type":"user","timestamp":"2026-07-01","content":"Нужно работать с этой cloud-сессией; настройки в облаке уже заменены."}
+{"type":"assistant","timestamp":"2026-07-01","content":"Текущий MCP-процесс сессии не переподключается к новому URL без нового Cloud Agent run. В этой сессии доступны 7 tools + memory_save."}
+{"type":"artifact","name":"manifest.json","version":"0.2.0-rc3","changes":["integration_type: hub","single_config_entry: true","homeassistant: 2025.7.0"]}
+{"type":"artifact","name":"config_flow.py","changes":["VERSION 4","subentries ir_hub/ir_remote","один шаг user: hub_pick+hub_name+area_id","убран hub_confirm checkbox"]}
+{"type":"artifact","name":"hub_registry.py","changes":["HubRef/RemoteRef","iter_hub_refs","hub_subentry_data","CONF_AREA_ID import fix"]}
+{"type":"artifact","name":"devices.py","changes":["async_update_device для area_id","config_subentry_id если API поддерживает"]}
+{"type":"artifact","name":"migration.py","changes":["v3→v4 consolidate hub/remote entries в parent+subentries","сохранение entry_id как subentry_id"]}
+{"type":"release","tags":["v0.2.0-rc1","v0.2.0-rc2","v0.2.0-rc3"],"latest":"https://github.com/slavonnet/EasyIR/releases/tag/v0.2.0-rc3"}
+{"type":"test_result","command":"python3 -m unittest discover -s tests -v","result":"148 tests OK"}
+{"type":"agentmemory_export","tool":"memory_export","memories":[{"id":"mem_mr21h7fe_8078f5d77ade","type":"architecture","project":"easyir"}],"sessions":[]}
