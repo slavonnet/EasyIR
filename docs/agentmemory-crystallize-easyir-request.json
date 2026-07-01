@@ -1,0 +1,100 @@
+{
+  "meta": {
+    "purpose": "Кристаллизация cloud-сессии EasyIR ZHA panel через REST API (обход 7-tool MCP shim)",
+    "created_at": "2026-07-01T13:00:00Z",
+    "project": "easyir",
+    "session_id": "cursor-easyir-zha-panel-ea9f-2026-07-01",
+    "source_jsonl": "docs/session-export-easyir-zha-panel-2026-07-01.jsonl",
+    "existing_memory_id": "mem_mr21h7fe_8078f5d77ade"
+  },
+  "api": {
+    "base_url": "https://aimem.git.obs.group",
+    "auth_header": "Authorization: Bearer iddqd",
+    "endpoints": {
+      "session_start": "POST /agentmemory/session/start",
+      "session_end": "POST /agentmemory/session/end",
+      "action_create": "POST /agentmemory/actions",
+      "action_update": "POST /agentmemory/actions/update",
+      "crystallize": "POST /agentmemory/crystals/create",
+      "crystal_list": "GET /agentmemory/crystals?project=easyir",
+      "auto_crystallize": "POST /agentmemory/crystals/auto"
+    }
+  },
+  "memory_crystallize_schema": {
+    "tool": "memory_crystallize",
+    "description": "Compress completed action chains into compact crystal digests using LLM summarization. Extracts narrative, key outcomes, files affected, and lessons.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "actionIds": {
+          "type": "string",
+          "description": "Comma-separated completed action IDs to crystallize"
+        },
+        "project": {
+          "type": "string",
+          "description": "Project context"
+        },
+        "sessionId": {
+          "type": "string",
+          "description": "Session context"
+        }
+      },
+      "required": ["actionIds"]
+    },
+    "rest_equivalent": {
+      "path": "/agentmemory/crystals/create",
+      "body": {
+        "actionIds": ["<act-id-1>", "<act-id-2>"],
+        "project": "easyir",
+        "sessionId": "cursor-easyir-zha-panel-ea9f-2026-07-01"
+      },
+      "note": "REST принимает actionIds как массив; MCP tool — comma-separated string"
+    }
+  },
+  "actions_to_create": [
+    {
+      "title": "EasyIR v4: subentries ir_hub/ir_remote + single_config_entry",
+      "description": "Архитектура ZHA-подобной панели: integration_type hub, single_config_entry, subentries, миграция v3→v4, PR #55, релизы rc1-rc3. Файлы: manifest.json, config_flow.py, hub_registry.py, migration.py, devices.py.",
+      "priority": 10,
+      "project": "easyir",
+      "tags": ["architecture", "subentries", "zha-ui"]
+    },
+    {
+      "title": "Онбординг в один шаг: hub_pick + hub_name + area_id",
+      "description": "Объединён выбор хаба, имя и комната на одном экране user step. Убран hub_confirm checkbox. Discovery path: ieee pre-filled → только name+room.",
+      "priority": 9,
+      "project": "easyir",
+      "tags": ["config_flow", "onboarding"]
+    },
+    {
+      "title": "Фикс CONF_AREA_ID NameError в hub_registry (rc2)",
+      "description": "Добавлен импорт CONF_AREA_ID в hub_registry.py. Релиз v0.2.0-rc2.",
+      "priority": 8,
+      "project": "easyir",
+      "tags": ["bugfix", "rc2"]
+    },
+    {
+      "title": "Фикс area_id: async_update_device вместо get_or_create (rc3)",
+      "description": "TypeError async_get_or_create unexpected keyword argument area_id. area_id назначается через async_update_device после создания устройства. config_subentry_id если API поддерживает. Релиз v0.2.0-rc3.",
+      "priority": 8,
+      "project": "easyir",
+      "tags": ["bugfix", "rc3", "devices.py"]
+    },
+    {
+      "title": "MCP AgentMemory: shim 7 tools, session JSONL export",
+      "description": "memory_crystallize недоступен в cloud MCP (shim fallback). Сервер aimem.git.obs.group healthy. REST /agentmemory/crystals/create доступен с Bearer iddqd. Экспорт сессии: docs/session-export-easyir-zha-panel-2026-07-01.jsonl. memory_save: mem_mr21h7fe_8078f5d77ade.",
+      "priority": 6,
+      "project": "easyir",
+      "tags": ["agentmemory", "mcp", "documentation"]
+    }
+  ],
+  "workflow": [
+    "1. POST session/start с sessionId, project=easyir, cwd=/workspace",
+    "2. Для каждого actions_to_create: POST /agentmemory/actions → сохранить actionId",
+    "3. Для каждого actionId: POST /agentmemory/actions/update {actionId, status: done, result: краткий итог}",
+    "4. POST /agentmemory/crystals/create {actionIds: [...], project, sessionId}",
+    "5. GET /agentmemory/crystals?project=easyir — проверить crystal",
+    "6. POST /agentmemory/session/end {sessionId}",
+    "7. Если crystallize падает (circuit breaker mem::compress open): попробовать /agentmemory/crystals/auto или memory_save fallback"
+  ]
+}
